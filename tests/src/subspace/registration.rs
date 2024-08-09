@@ -86,8 +86,10 @@ fn registration_fails_when_max_registrations_per_interval_reached() {
                 ));
                 step_block(1);
 
-                MaxRegistrationsPerInterval::<Test>::set(netuid, interval);
-                TargetRegistrationsInterval::<Test>::set(netuid, interval);
+                ModuleBurnConfig::<Test>::mutate(netuid, |config| {
+                    config.max_registrations_per_interval = interval;
+                    config.target_registrations_interval = interval;
+                });
             }
 
             assert_ok!(register_module(
