@@ -941,7 +941,7 @@ fn test_emission_exploit() {
         name.extend(key.to_string().as_bytes().to_vec());
         let address: Vec<u8> = "0.0.0.0:30333".as_bytes().to_vec();
         let origin = get_origin(yuma_badactor_key);
-        let _ = SubspaceMod::register_network(origin.clone(), network.clone(), None);
+        let _ = SubspaceMod::register_subnet(origin.clone(), network.clone(), None);
         assert_ok!(SubspaceMod::register(
             origin.clone(),
             network,
@@ -1165,7 +1165,7 @@ fn test_subnet_deregistration_based_on_emission() {
 
         let universal_vec = "subnet4".to_string().as_bytes().to_vec();
         add_balance(3, to_nano(3000));
-        let _ = SubspaceMod::do_register_network(get_origin(3), universal_vec.clone(), None);
+        let _ = SubspaceMod::do_register_subnet(get_origin(3), universal_vec.clone(), None);
         assert_ok!(SubspaceMod::do_register(
             get_origin(3),
             universal_vec.clone(),

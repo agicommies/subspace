@@ -1054,12 +1054,12 @@ pub mod pallet {
 
         #[pallet::call_index(12)]
         #[pallet::weight((T::WeightInfo::register(), DispatchClass::Normal, Pays::No))]
-        pub fn register_network(
+        pub fn register_subnet(
             origin: OriginFor<T>,
             name: Vec<u8>,
             metadata: Option<Vec<u8>>,
         ) -> DispatchResult {
-            Self::do_register_network(origin, name, metadata)
+            Self::do_register_subnet(origin, name, metadata)
         }
     }
 }

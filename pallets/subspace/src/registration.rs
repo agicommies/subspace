@@ -90,7 +90,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    pub fn do_register_network(
+    pub fn do_register_subnet(
         origin: T::RuntimeOrigin,
         network_name: Vec<u8>,
         network_metadata: Option<Vec<u8>>,

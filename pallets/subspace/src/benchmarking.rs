@@ -22,7 +22,7 @@ fn register_mock<T: Config>(
     );
     let network_metadata = Some("networkmetadata".as_bytes().to_vec());
     let metadata = Some("metadata".as_bytes().to_vec());
-    let _ = SubspaceMod::<T>::register_network(
+    let _ = SubspaceMod::<T>::register_subnet(
         RawOrigin::Signed(key.clone()).into(),
         network.clone(),
         network_metadata,
@@ -243,13 +243,13 @@ benchmarks! {
         T::set_subnet_consensus_type(netuid, Some(SubnetConsensus::Root));
     }: delegate_rootnet_control(RawOrigin::Signed(module_key), module_key2)
 
-    register_network {
+    register_subnet {
         let key: T::AccountId = account("Alice", 0, 1);
         let stake = 100000000000000u64;
         SubspaceMod::<T>::add_balance_to_account(
             &key,
             SubspaceMod::<T>::u64_to_balance(stake + SubnetBurn::<T>::get() + 2000).unwrap(),
         );
-    }: register_network(RawOrigin::Signed(key.clone()), "testnet".as_bytes().to_vec(), Some(b"testmetadata".to_vec()))
+    }: register_subnet(RawOrigin::Signed(key.clone()), "testnet".as_bytes().to_vec(), Some(b"testmetadata".to_vec()))
 
 }

@@ -120,7 +120,7 @@ fn test_emission() {
             let key_id: u32 = i as u32 + 100;
             let key_origin = get_origin(key_id);
             SubspaceMod::add_balance_to_account(&key_id, 1_000_000_000_000_000);
-            let _ = SubspaceMod::register_network(
+            let _ = SubspaceMod::register_subnet(
                 key_origin.clone(),
                 format!("net{}", i).as_bytes().to_vec(),
                 None,

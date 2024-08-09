@@ -483,7 +483,7 @@ pub fn delegate_register_module(
         SubspaceMod::add_balance_to_account(&key, stake + 1);
     }
 
-    let _ = SubspaceMod::register_network(origin.clone(), network.clone(), None);
+    let _ = SubspaceMod::register_subnet(origin.clone(), network.clone(), None);
     let result = SubspaceMod::register(origin, network, name.clone(), address, module_key, None);
     SubspaceMod::increase_stake(&key, &module_key, stake);
 
@@ -593,7 +593,7 @@ pub fn register_module(
     let _ = register_subnet(key, netuid);
 
     SubspaceMod::add_balance_to_account(&key, SubnetBurn::<Test>::get() + 1);
-    let _ = SubspaceMod::register_network(origin.clone(), network.clone(), None);
+    let _ = SubspaceMod::register_subnet(origin.clone(), network.clone(), None);
     SubspaceMod::register(origin, network.clone(), name, address, key, None)?;
     SubspaceMod::increase_stake(&key, &key, stake);
 
@@ -615,7 +615,7 @@ pub fn register_root_validator(key: AccountId, stake: u64) -> Result<u16, Dispat
     let name = format!("module{key}").as_bytes().to_vec();
     let address = "0.0.0.0:30333".as_bytes().to_vec();
 
-    let _ = SubspaceMod::register_network(origin.clone(), network.clone(), None);
+    let _ = SubspaceMod::register_subnet(origin.clone(), network.clone(), None);
     SubspaceMod::register(origin, network.clone(), name, address, key, None)?;
     SubspaceMod::increase_stake(&key, &key, stake);
 

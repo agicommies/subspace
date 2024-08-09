@@ -17,7 +17,7 @@ fn register(account: AccountId, subnet_id: u16, module: AccountId, stake: u64) {
         add_balance(account, to_nano(1));
     }
 
-    let _ = SubspaceMod::do_register_network(
+    let _ = SubspaceMod::do_register_subnet(
         get_origin(account),
         format!("subnet-{subnet_id}").as_bytes().to_vec(),
         None,
