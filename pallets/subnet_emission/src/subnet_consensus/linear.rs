@@ -1,9 +1,10 @@
 use crate::{pallet, EmissionError, Pallet};
 
+use crate::subnet_consensus::yuma::{AccountKey, ModuleKey};
 use core::marker::PhantomData;
-use frame_support::weights::Weight;
+use frame_support::{ensure, weights::Weight};
 use pallet_subnet_emission_api::SubnetConsensus;
-use std::collections::BTreeMap;
+use sp_std::collections::btree_map::BTreeMap;
 // use frame_support::{pallet_prelude::Weight, weights::RuntimeDbWeight};
 use pallet_subspace::{
     math::*, Config, Dividends, Emission, Founder, GlobalParams, Incentive, IncentiveRatio,
@@ -123,7 +124,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
             self.current_block,
             &stake_f64,
             total_stake_u64,
-            self.last_update,
+            self.last_update.clone(),
         );
 
         // INCENTIVE
@@ -171,18 +172,24 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         Dividends::<T>::insert(self.netuid, fixed_dividends);
 
         // EMISSION
-        Self::process_emission(
+
+        let (incentive_emission_float, dividends_emission_float) = Self::calculate_emission_ratios(
             &incentive,
             &dividends,
             self.to_be_emitted,
             self.netuid,
-            self.founder_emission,
-            &self.founder_key,
-            &uid_key_tuples,
-            self.linear_netuid,
-        )?;
+        );
 
-        Ok(())
+        let emission = Self::calculate_emissions(
+            &self,
+            &incentive_emission_float,
+            &dividends_emission_float,
+            &uid_key_tuples,
+        );
+
+        let emission_information = self.distribute_emissions(emission, &uid_key_tuples)?;
+
+        Ok((emission_information, Weight::zero()))
     }
 
     fn calculate_emission_ratios(
@@ -226,13 +233,10 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
     }
 
     fn calculate_emissions(
+        &self,
         incentive_emission_float: &[I64F64],
         dividends_emission_float: &[I64F64],
-        founder_emission: u64,
-        netuid: u16,
-        founder_key: &T::AccountId,
         uid_key_tuples: &[(u16, T::AccountId)],
-        linear_netuid: u16,
     ) -> Vec<u64> {
         let n = incentive_emission_float.len();
         let mut incentive_emission: Vec<u64> =
@@ -240,117 +244,114 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         let dividends_emission: Vec<u64> =
             dividends_emission_float.iter().map(|e| e.to_num::<u64>()).collect();
 
-        if netuid != linear_netuid {
+        if self.netuid != self.linear_netuid {
             if let Some(founder_incentive) =
-                PalletSubspace::<T>::get_uid_for_key(netuid, founder_key)
+                PalletSubspace::<T>::get_uid_for_key(self.netuid, &self.founder_key)
                     .and_then(|founder_uid| incentive_emission.get_mut(founder_uid as usize))
             {
-                *founder_incentive = founder_incentive.saturating_add(founder_emission);
+                *founder_incentive = founder_incentive.saturating_add(self.founder_emission);
             }
         }
 
         let mut emission: Vec<u64> = vec![0; n];
-        let mut emitted = 0u64;
 
-        for (module_uid, module_key) in uid_key_tuples.iter() {
+        for (module_uid, _) in uid_key_tuples.iter() {
             let owner_emission_incentive: u64 =
                 *incentive_emission.get(*module_uid as usize).unwrap_or(&0);
-            let mut owner_dividends_emission: u64 =
+            let owner_dividends_emission: u64 =
                 *dividends_emission.get(*module_uid as usize).unwrap_or(&0);
             if let Some(emi) = emission.get_mut(*module_uid as usize) {
                 *emi = owner_emission_incentive.saturating_add(owner_dividends_emission);
             }
-
-            if owner_dividends_emission > 0 {
-                let ownership_vector: Vec<(T::AccountId, I64F64)> =
-                    PalletSubspace::<T>::get_ownership_ratios(netuid, module_key);
-
-                let delegation_fee = PalletSubspace::<T>::get_delegation_fee(module_key);
-
-                let total_owner_dividends_emission: u64 = owner_dividends_emission;
-                for (delegate_key, delegate_ratio) in ownership_vector.iter() {
-                    if delegate_key == module_key {
-                        continue;
-                    }
-
-                    let dividends_from_delegate: u64 =
-                        I64F64::from_num(total_owner_dividends_emission)
-                            .checked_mul(*delegate_ratio)
-                            .map(|result| result.to_num::<u64>())
-                            .unwrap_or_default();
-                    let to_module: u64 = delegation_fee.mul_floor(dividends_from_delegate);
-                    let to_delegate: u64 = dividends_from_delegate.saturating_sub(to_module);
-                    PalletSubspace::<T>::increase_stake(delegate_key, module_key, to_delegate);
-                    emitted = emitted.saturating_add(to_delegate);
-                    owner_dividends_emission = owner_dividends_emission.saturating_sub(to_delegate);
-                }
-            }
-
-            let owner_emission: u64 =
-                owner_emission_incentive.saturating_add(owner_dividends_emission);
-            if owner_emission > 0 {
-                PalletSubspace::<T>::increase_stake(module_key, module_key, owner_emission);
-                emitted = emitted.saturating_add(owner_emission);
-            }
-        }
-
-        if netuid == linear_netuid && founder_emission > 0 {
-            // Update global treasure
-            PalletSubspace::<T>::add_balance_to_account(
-                &T::get_dao_treasury_address(),
-                PalletSubspace::<T>::u64_to_balance(founder_emission).unwrap_or_default(),
-            );
         }
 
         emission
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn process_emission(
-        incentive: &[I32F32],
-        dividends: &[I32F32],
-        to_be_emitted: u64,
-        netuid: u16,
-        founder_emission: u64,
-        founder_key: &T::AccountId,
+    fn distribute_emissions(
+        &self,
+        emission: Vec<u64>,
         uid_key_tuples: &[(u16, T::AccountId)],
-        linear_netuid: u16,
-    ) -> Result<(), EmissionError> {
-        let (incentive_emission_float, dividends_emission_float) =
-            Self::calculate_emission_ratios(incentive, dividends, to_be_emitted, netuid);
+    ) -> Result<EmissionMap<T>, EmissionError> {
+        let mut emissions: EmissionMap<T> = Default::default();
+        let mut emitted = 0u64;
 
-        let emission = Self::calculate_emissions(
-            &incentive_emission_float,
-            &dividends_emission_float,
-            founder_emission,
-            netuid,
-            founder_key,
-            uid_key_tuples,
-            linear_netuid,
-        );
+        for (module_uid, module_key) in uid_key_tuples.iter() {
+            let owner_emission = emission.get(*module_uid as usize).copied().unwrap_or(0);
 
-        // Check if total emission exceeds to_be_emitted
-        let total_emitted: u64 = emission.iter().sum();
-        if total_emitted > to_be_emitted {
-            return Err(EmissionError::EmittedMoreThanExpected {
-                emitted: total_emitted,
-                expected: to_be_emitted,
-            });
+            if owner_emission > 0 {
+                let ownership_vector: Vec<(T::AccountId, I64F64)> =
+                    PalletSubspace::<T>::get_ownership_ratios(self.netuid, module_key);
+
+                let delegation_fee = PalletSubspace::<T>::get_delegation_fee(module_key);
+
+                let mut remaining_emission = owner_emission;
+
+                for (delegate_key, delegate_ratio) in ownership_vector.iter() {
+                    if delegate_key == module_key {
+                        continue;
+                    }
+
+                    let dividends_from_delegate: u64 = I64F64::from_num(owner_emission)
+                        .checked_mul(*delegate_ratio)
+                        .map(|result| result.to_num::<u64>())
+                        .unwrap_or_default();
+
+                    let to_module: u64 = delegation_fee.mul_floor(dividends_from_delegate);
+                    let to_delegate: u64 = dividends_from_delegate.saturating_sub(to_module);
+
+                    PalletSubspace::<T>::increase_stake(delegate_key, module_key, to_delegate);
+                    emitted = emitted.saturating_add(to_delegate);
+                    remaining_emission = remaining_emission.saturating_sub(to_delegate);
+
+                    let stake = emissions
+                        .entry(ModuleKey(module_key.clone()))
+                        .or_default()
+                        .entry(AccountKey(delegate_key.clone()))
+                        .or_default();
+                    *stake = stake.saturating_add(to_delegate);
+                }
+
+                if remaining_emission > 0 {
+                    PalletSubspace::<T>::increase_stake(module_key, module_key, remaining_emission);
+                    emitted = emitted.saturating_add(remaining_emission);
+
+                    let stake = emissions
+                        .entry(ModuleKey(module_key.clone()))
+                        .or_default()
+                        .entry(AccountKey(module_key.clone()))
+                        .or_default();
+                    *stake = stake.saturating_add(remaining_emission);
+                }
+            }
         }
 
-        Emission::<T>::insert(netuid, emission);
-        let emission_map: EmissionMap<T> = uid_key_tuples
-            .iter()
-            .zip(emission.iter())
-            .map(|((uid, account_id), &amount)| {
-                (
-                    ModuleKey::<T>::new(*uid, netuid),
-                    [(account_id.clone(), amount)].into_iter().collect(),
-                )
-            })
-            .collect();
+        if self.netuid == self.linear_netuid && self.founder_emission > 0 {
+            // Update global treasure
+            if let Some(balance) = PalletSubspace::<T>::u64_to_balance(self.founder_emission) {
+                PalletSubspace::<T>::add_balance_to_account(
+                    &T::get_dao_treasury_address(),
+                    balance,
+                );
+                emitted = emitted.saturating_add(self.founder_emission);
+            } else {
+                return Err(EmissionError::BalanceConversionFailed);
+            }
+        }
 
-        Ok(emission_map)
+        ensure!(
+            emitted <= self.founder_emission.saturating_add(self.to_be_emitted),
+            EmissionError::EmittedMoreThanExpected {
+                emitted,
+                expected: self.founder_emission.saturating_add(self.to_be_emitted)
+            }
+        );
+
+        Emission::<T>::insert(self.netuid, emission);
+
+        log::trace!("emitted {emitted} tokens in total");
+
+        Ok(emissions)
     }
 
     fn compute_dividends(
