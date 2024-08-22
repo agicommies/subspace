@@ -1,7 +1,9 @@
 use crate::{pallet, EmissionError, Pallet};
 
 use core::marker::PhantomData;
+use frame_support::weights::Weight;
 use pallet_subnet_emission_api::SubnetConsensus;
+use std::collections::BTreeMap;
 // use frame_support::{pallet_prelude::Weight, weights::RuntimeDbWeight};
 use pallet_subspace::{
     math::*, Config, Dividends, Emission, Founder, GlobalParams, Incentive, IncentiveRatio,
@@ -10,6 +12,8 @@ use pallet_subspace::{
 // use sp_core::Get;
 use sp_std::vec;
 use substrate_fixed::types::{I32F32, I64F64};
+
+use super::yuma::EmissionMap;
 
 // struct WeightCounter<T: Config> {
 //     weight: Weight,
@@ -81,9 +85,9 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
     /// This function acts as the main function of the entire blockchain reward distribution.
     /// It calculates the dividends, the incentive, the weights, the bonds,
     /// the trust and the emission for the epoch.
-    pub fn run(self) -> Result<(), EmissionError> {
+    pub fn run(self) -> Result<(EmissionMap<T>, Weight), EmissionError> {
         if self.module_count == 0 {
-            return Ok(());
+            return Ok((BTreeMap::new(), Weight::zero()));
         }
 
         // STAKE
@@ -335,7 +339,18 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         }
 
         Emission::<T>::insert(netuid, emission);
-        Ok(())
+        let emission_map: EmissionMap<T> = uid_key_tuples
+            .iter()
+            .zip(emission.iter())
+            .map(|((uid, account_id), &amount)| {
+                (
+                    ModuleKey::<T>::new(*uid, netuid),
+                    [(account_id.clone(), amount)].into_iter().collect(),
+                )
+            })
+            .collect();
+
+        Ok(emission_map)
     }
 
     fn compute_dividends(

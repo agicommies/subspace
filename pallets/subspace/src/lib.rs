@@ -71,7 +71,7 @@ pub mod pallet {
     use sp_core::{ConstU16, ConstU64, ConstU8};
     pub use sp_std::{vec, vec::Vec};
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(13);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(14);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -818,13 +818,12 @@ pub mod pallet {
                 Self::clear_set_weight_rate_limiter(netuid);
             }
 
-            // TODO: fix later
+            // TODO: fix latr
             Weight::default()
         }
 
         fn on_idle(_n: BlockNumberFor<T>, _remaining: Weight) -> Weight {
             log::info!("running on_idle");
-            // Pallet::<T>::deregister_not_whitelisted_modules(remaining)
             Weight::zero()
         }
     }

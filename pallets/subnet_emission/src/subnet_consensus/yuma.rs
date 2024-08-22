@@ -1,6 +1,6 @@
 use crate::{EmissionError, Pallet};
 use core::marker::PhantomData;
-use frame_support::{ensure, DebugNoBound};
+use frame_support::{ensure, traits::Get, weights::Weight, DebugNoBound};
 use pallet_subspace::{
     math::*, Active, Bonds, BondsMovingAverage, Config, Consensus, Dividends, Emission, Founder,
     Incentive, Kappa, Keys, LastUpdate, MaxAllowedValidators, MaxWeightAge,
@@ -72,7 +72,9 @@ impl<T: Config> YumaEpoch<T> {
 
     /// Runs the YUMA consensus calculation on the network and distributes the emissions. Returns a
     /// map of emissions distributed per module key.
-    pub fn run(self) -> Result<EmissionMap<T>, EmissionError> {
+    pub fn run(self) -> Result<(EmissionMap<T>, Weight), EmissionError> {
+        let mut weight = Weight::zero();
+
         log::debug!(
             "running yuma for netuid {}, will emit {} modules and {} to founder",
             self.netuid,
@@ -203,6 +205,7 @@ impl<T: Config> YumaEpoch<T> {
         ValidatorPermits::<T>::insert(self.netuid, &new_permits);
         ValidatorTrust::<T>::insert(self.netuid, validator_trust);
 
+        weight = weight.saturating_add(T::DbWeight::get().writes(7));
         ensure!(
             new_permits.len() == self.module_count as usize,
             "unequal number of permits and modules"
@@ -254,7 +257,7 @@ impl<T: Config> YumaEpoch<T> {
             self.netuid
         );
 
-        distribute_emissions
+        Ok((distribute_emissions?, weight))
     }
 
     fn distribute_emissions(
