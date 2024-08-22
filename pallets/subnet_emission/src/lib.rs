@@ -116,7 +116,7 @@ pub mod pallet {
 
         fn on_idle(_n: BlockNumberFor<T>, remaining: Weight) -> Weight {
             log::info!("on_idle: {remaining:?}");
-            Self::deregister_not_whitelisted_modules(remaining)
+            Self::deregister_excess_modules(remaining)
         }
     }
 
