@@ -44,7 +44,7 @@ fn register_mock<T: Config>(
         RawOrigin::Signed(key.clone()).into(),
         network.clone(),
         network_metadata,
-    ); 
+    );
     SubspaceMod::<T>::register(
         RawOrigin::Signed(key.clone()).into(),
         network,
