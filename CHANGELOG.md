@@ -1,5 +1,12 @@
 # Changelog
 
+[unreleased]
+
+spec version `121`
+
+- can not set weight on modules outside of whitelist on SN2
+- respecting `max_allowed_validators` in linear consensus
+
 spec version `120`
 
 Storages:
