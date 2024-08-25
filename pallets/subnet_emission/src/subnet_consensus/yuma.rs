@@ -9,8 +9,8 @@ use sp_std::{borrow::Cow, collections::btree_map::BTreeMap, vec::Vec};
 
 pub type EmissionMap<T> = BTreeMap<ModuleKey<T>, BTreeMap<AccountKey<T>, u64>>;
 
-mod foo {
-    use std::collections::BTreeMap;
+pub mod params {
+    use sp_std::collections::btree_map::BTreeMap;
 
     use super::{AccountKey, ModuleKey};
 
@@ -21,8 +21,10 @@ mod foo {
     };
     use substrate_fixed::types::{I32F32, I64F64};
 
+    // StorageDoubleMap<SubnetId, TempoIndex = epoch block number, YumaParams>;
+
     #[derive(DebugNoBound)]
-    pub(super) struct Foo<T: Config> {
+    pub struct YumaParams<T: Config> {
         pub subnet_id: u16,
         pub token_emission: u64,
 
@@ -39,7 +41,7 @@ mod foo {
     }
 
     #[derive(DebugNoBound)]
-    pub(super) struct ModuleParams {
+    pub struct ModuleParams {
         pub uid: u16,
         pub last_update: u64,
         pub block_at_registration: u64,
@@ -95,8 +97,8 @@ mod foo {
         }
     }
 
-    impl<T: Config> Foo<T> {
-        fn new(subnet_id: u16, token_emission: u64) -> Result<Self, &'static str> {
+    impl<T: Config> YumaParams<T> {
+        pub fn new(subnet_id: u16, token_emission: u64) -> Result<Self, &'static str> {
             let uids: BTreeMap<_, _> = Keys::<T>::iter_prefix(subnet_id).collect();
 
             let stake = Self::compute_stake(&uids);
@@ -196,14 +198,14 @@ pub struct YumaEpoch<T: Config> {
     /// The UID of the subnet
     subnet_id: u16,
 
-    params: foo::Foo<T>,
-    modules: foo::FlattenedModules<T>,
+    params: params::YumaParams<T>,
+    modules: params::FlattenedModules<T>,
 
     _pd: PhantomData<T>,
 }
 
 impl<T: Config> YumaEpoch<T> {
-    pub fn new(subnet_id: u16, mut params: foo::Foo<T>) -> Self {
+    pub fn new(subnet_id: u16, mut params: params::YumaParams<T>) -> Self {
         let modules = sp_std::mem::take(&mut params.modules).into();
 
         Self {
@@ -348,7 +350,7 @@ impl<T: Config> YumaEpoch<T> {
         let mut result = Vec::with_capacity(self.module_count());
         for (module_uid, module_key) in self.modules.keys.iter().enumerate() {
             result.push((
-                module_key.to_owned(),
+                ModuleKey(module_key.0.clone()),
                 *server_emissions.get(module_uid).unwrap_or(&0),
                 *validator_emissions.get(module_uid).unwrap_or(&0),
             ));
