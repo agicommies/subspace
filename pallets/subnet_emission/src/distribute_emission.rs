@@ -148,7 +148,9 @@ fn run_linear_consensus<T: Config>(
 ///
 /// This function creates and runs a new YumaEpoch, logging any errors that occur.
 fn run_yuma_consensus<T: Config>(netuid: u16, emission_to_drain: u64) -> Result<(), &'static str> {
-    YumaEpoch::<T>::new(netuid, emission_to_drain).run().map(|_| ()).map_err(|err| {
+    let params = subnet_consensus::yuma::params::YumaParams::<T>::new(netuid, emission_to_drain)?;
+
+    YumaEpoch::<T>::new(netuid, params).run().map(|_| ()).map_err(|err| {
         log::error!(
             "Failed to run yuma consensus algorithm: {err:?}, skipping this block. \
             {emission_to_drain} tokens will be emitted on the next epoch."
