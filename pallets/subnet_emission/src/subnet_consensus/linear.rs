@@ -14,7 +14,7 @@ use pallet_subspace::{
 use sp_std::vec;
 use substrate_fixed::types::{I32F32, I64F64};
 
-use super::yuma::EmissionMap;
+use super::{yuma::EmissionMap, WeightCounter};
 
 // struct WeightCounter<T: Config> {
 //     weight: Weight,
@@ -49,6 +49,7 @@ pub struct LinearEpoch<T: Config + pallet::Config> {
     global_params: GlobalParams<T>,
     subnet_params: SubnetParams<T>,
     linear_netuid: u16,
+    weight_counter: WeightCounter,
     _pd: PhantomData<T>,
 }
 
@@ -57,11 +58,20 @@ pub struct LinearEpoch<T: Config + pallet::Config> {
 /// the trust and the emission for the epoch.
 impl<T: Config + pallet::Config> LinearEpoch<T> {
     pub fn new(netuid: u16, to_be_emitted: u64) -> Self {
+        let mut weight_counter = WeightCounter::new();
+
         let founder_key = Founder::<T>::get(netuid);
+        weight_counter.read(1);
+
         let (to_be_emitted, founder_emission) =
             PalletSubspace::<T>::calculate_founder_emission(netuid, to_be_emitted);
+        weight_counter.read(1);
+
         let global_params = PalletSubspace::<T>::global_params();
+        weight_counter.read(12);
+
         let subnet_params = PalletSubspace::<T>::subnet_params(netuid);
+        weight_counter.read(17);
 
         Self {
             module_count: N::<T>::get(netuid),
@@ -76,7 +86,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
 
             global_params,
             subnet_params,
-
+            weight_counter,
             linear_netuid: Pallet::<T>::get_consensus_netuid(SubnetConsensus::Linear).unwrap_or(2),
 
             _pd: Default::default(),
@@ -86,7 +96,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
     /// This function acts as the main function of the entire blockchain reward distribution.
     /// It calculates the dividends, the incentive, the weights, the bonds,
     /// the trust and the emission for the epoch.
-    pub fn run(self) -> Result<(EmissionMap<T>, Weight), EmissionError> {
+    pub fn run(mut self) -> Result<(EmissionMap<T>, Weight), EmissionError> {
         if self.module_count == 0 {
             return Ok((BTreeMap::new(), Weight::zero()));
         }
@@ -94,11 +104,21 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         // STAKE
         let uid_key_tuples: Vec<(u16, T::AccountId)> =
             PalletSubspace::<T>::get_uid_key_tuples(self.netuid);
+        self.weight_counter.read(uid_key_tuples.len().saturating_add(1));
+
         let total_stake_u64: u64 = PalletSubspace::<T>::get_total_subnet_stake(self.netuid).max(1);
+        self.weight_counter.read(1); // How to get the weight of the above function without querying it again?
 
         let stake_u64: Vec<u64> = uid_key_tuples
             .iter()
-            .map(|(_, key)| pallet_subspace::Pallet::<T>::get_delegated_stake(key))
+            .map(|(_, key)| {
+                self.weight_counter.read(
+                    pallet_subspace::StakeFrom::<T>::iter_prefix_values(key)
+                        .count()
+                        .saturating_mul(2),
+                ); // How to get the weight of the above function without querying it again?
+                pallet_subspace::Pallet::<T>::get_delegated_stake(key)
+            })
             .collect();
 
         let stake_f64: Vec<I64F64> = stake_u64
@@ -125,6 +145,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
             &stake_f64,
             total_stake_u64,
             self.last_update.clone(),
+            &mut self.weight_counter,
         );
 
         // INCENTIVE
@@ -134,6 +155,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         // TRUST
         // trust that acts as a multiplier for the incentive
         let trust_ratio: u16 = TrustRatio::<T>::get(self.netuid);
+        self.weight_counter.read(1);
         if trust_ratio > 0 {
             let trust_share: I32F32 = I32F32::from_num(trust_ratio)
                 .checked_div(I32F32::from_num(100))
@@ -156,12 +178,14 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
                 self.netuid,
                 trust.iter().map(|xi| fixed_proportion_to_u16(*xi)).collect::<Vec<u16>>(),
             );
+            self.weight_counter.wrote(1);
         }
 
         // store the incentive
         let cloned_incentive: Vec<u16> =
             incentive.iter().map(|xi| fixed_proportion_to_u16(*xi)).collect::<Vec<u16>>();
         Incentive::<T>::insert(self.netuid, cloned_incentive);
+        self.weight_counter.wrote(1);
 
         //  BONDS
         let bonds: Vec<Vec<(u16, I32F32)>> = Self::compute_bonds_delta(&weights, &stake)?;
@@ -170,6 +194,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         let (fixed_dividends, dividends) =
             Self::compute_dividends(&bonds, &incentive, &uid_key_tuples)?;
         Dividends::<T>::insert(self.netuid, fixed_dividends);
+        self.weight_counter.wrote(1);
 
         // EMISSION
 
@@ -189,7 +214,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
 
         let emission_information = self.distribute_emissions(emission, &uid_key_tuples)?;
 
-        Ok((emission_information, Weight::zero()))
+        Ok((emission_information, self.weight_counter.to_weights::<T>()))
     }
 
     fn calculate_emission_ratios(
@@ -269,7 +294,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
     }
 
     fn distribute_emissions(
-        &self,
+        &mut self,
         emission: Vec<u64>,
         uid_key_tuples: &[(u16, T::AccountId)],
     ) -> Result<EmissionMap<T>, EmissionError> {
@@ -282,8 +307,10 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
             if owner_emission > 0 {
                 let ownership_vector: Vec<(T::AccountId, I64F64)> =
                     PalletSubspace::<T>::get_ownership_ratios(self.netuid, module_key);
+                self.weight_counter.read(2);
 
                 let delegation_fee = PalletSubspace::<T>::get_delegation_fee(module_key);
+                self.weight_counter.read(2);
 
                 let mut remaining_emission = owner_emission;
 
@@ -301,6 +328,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
                     let to_delegate: u64 = dividends_from_delegate.saturating_sub(to_module);
 
                     PalletSubspace::<T>::increase_stake(delegate_key, module_key, to_delegate);
+                    self.weight_counter.wrote(3);
                     emitted = emitted.saturating_add(to_delegate);
                     remaining_emission = remaining_emission.saturating_sub(to_delegate);
 
@@ -333,6 +361,8 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
                     &T::get_dao_treasury_address(),
                     balance,
                 );
+
+                self.weight_counter.wrote(1);
                 emitted = emitted.saturating_add(self.founder_emission);
             } else {
                 return Err(EmissionError::BalanceConversionFailed);
@@ -348,6 +378,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         );
 
         Emission::<T>::insert(self.netuid, emission);
+        self.weight_counter.wrote(1);
 
         log::trace!("emitted {emitted} tokens in total");
 
@@ -543,10 +574,12 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         stake_f64: &[I64F64],
         total_stake_u64: u64,
         last_update_vector: Vec<u64>,
+        weight_counter: &mut WeightCounter,
     ) -> Vec<Vec<(u16, I32F32)>> {
         let min_weight_stake_f64 = I64F64::from_num(global_params.min_weight_stake);
         let mut weights: Vec<Vec<(u16, u16)>> = vec![vec![]; n as usize];
 
+        weight_counter.read(1);
         for (uid_i, weights_i) in Weights::<T>::iter_prefix(netuid) {
             let weight_age =
                 Self::get_current_weight_age(&last_update_vector, current_block, uid_i);
@@ -568,6 +601,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
 
             if weight_changed {
                 Weights::<T>::insert(netuid, uid_i, weights.clone());
+                weight_counter.wrote(1);
             }
         }
 

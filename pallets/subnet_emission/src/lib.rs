@@ -16,11 +16,7 @@ pub mod subnet_pricing {
     pub mod root;
 }
 
-pub mod subnet_consensus {
-    pub mod linear;
-    pub mod treasury;
-    pub mod yuma;
-}
+pub mod subnet_consensus;
 
 // TODO:
 // move some import outside of the macro
