@@ -333,26 +333,6 @@ pub struct ConsensusSimulationResult<T: pallet_subspace::Config> {
     pub _phantom: PhantomData<T>,
 }
 
-/// Calculates the consensus simulation result
-/// determines if copying weights is irrational.
-pub fn is_copying_irrational<T: pallet_subspace::Config>(
-    netuid: u16,
-    decrypted_weights: Vec<(u8, Vec<(u8, u8)>)>,
-) -> bool {
-    // TODO:
-    // 1. Query onchain decrypted weights
-    // 2. Overwrite them by decrypted_weights
-    // 3. Query MeasuredStakeAmount
-    // 4. Query Minimum Delegation fee
-    // 5. Query onchain YumaParams
-    // 6. Generate weight copier information (consensus_stake * MeasuredStakeAmount, generate key,
-    //    uid, use last decrypted onchain weights etc.)
-    // 7. Append this weight copier information to YumaParams
-    // 8. Run YumaEpoch with the new YumaParams
-    // 9. Update ConsensusSimulationResult struct
-    // 10. Return can_decrypt(ConsensusSimulationResult)
-    true
-}
 /// Determines if the copier's performance is irrational based on cumulative dividends.
 ///
 /// # Arguments
