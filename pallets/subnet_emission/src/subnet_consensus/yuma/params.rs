@@ -7,15 +7,18 @@ use pallet_subspace::{
     math::*, BalanceOf, Bonds, BondsMovingAverage, Config, Founder, Kappa, Keys, LastUpdate,
     MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace, ValidatorPermits, Vec, Weights,
 };
+use parity_scale_codec::{Decode, Encode};
+use scale_info::TypeInfo;
 use substrate_fixed::types::{I32F32, I64F64};
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode, TypeInfo)]
 pub struct AccountKey<AccountId>(pub AccountId);
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode, TypeInfo)]
 pub struct ModuleKey<AccountId>(pub AccountId);
 
-#[derive(DebugNoBound)]
+#[derive(DebugNoBound, Clone, Encode, Decode, TypeInfo)]
+#[scale_info(skip_type_params(T))]
 pub struct YumaParams<T: Config> {
     pub subnet_id: u16,
     pub token_emission: BalanceOf<T>,
@@ -32,7 +35,7 @@ pub struct YumaParams<T: Config> {
     pub bonds_moving_average: u64,
 }
 
-#[derive(DebugNoBound)]
+#[derive(Clone, Encode, Decode, TypeInfo, Debug)]
 pub struct ModuleParams {
     pub uid: u16,
     pub last_update: u64,
