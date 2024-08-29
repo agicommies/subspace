@@ -1250,16 +1250,46 @@ fn yuma_does_not_fail_if_module_does_not_have_stake() {
     });
 }
 
+/// Super simple test ensuring it is not profitable to copy weights
 #[test]
 fn foo() {
     new_test_ext().execute_with(|| {
         register_subnet(0, 0).unwrap();
         // TODO:
-        // let last_params = YumaParams::<Test>::new(0, to_nano(100)).unwrap();
-        // let last_output = YumaEpoch::<Test>::new(0, last_params).run().unwrap();
+        let universal_p_emission = to_nano(100);
 
-        // let now_params = YumaParams::<Test>::new(0, to_nano(50)).unwrap();
-        // let now_output = YumaEpoch::<Test>::new(0, now_params).run().unwrap();
+        let netuid: u16 = 0;
+        let key = 0;
+        let subnet_name = "subnet1";
+        register_named_subnet(u32::MAX, netuid, subnet_name);
+        SubnetConsensusType::<Test>::set(netuid, Some(SubnetConsensus::Yuma));
+        // Register 10 modules
+        let n = 10u16;
+        let stake = to_nano(10_000);
+        register_n_modules(netuid, n, stake, false);
+
+        // Create UID and weights matrixes
+        // Make the higher 5 be validators
+        // Lower 5 be miners
+        let general_uid_vector: Vec<u16> = (0..n).collect();
+        let mut weight_vector: Vec<u16> = vec![1u16; n as usize];
+
+        // Set the validator weights
+        for key in 0..5 {
+            set_weights(
+                netuid,
+                key,
+                general_uid_vector.clone(),
+                weight_vector.clone(),
+            );
+        }
+
+        let last_params = YumaParams::<Test>::new(0, universal_p_emission).unwrap();
+
+        let last_output = YumaEpoch::<Test>::new(0, last_params).run().unwrap();
+
+        let now_params = YumaParams::<Test>::new(0, universal_p_emission).unwrap();
+        let now_output = YumaEpoch::<Test>::new(0, now_params).run().unwrap();
 
         // let foo = pallet_offworker::ConsensusSimulationResult {
         //     cumulative_copier_divs: I64F64::from_num(0.8),
