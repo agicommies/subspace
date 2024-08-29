@@ -324,6 +324,8 @@ impl<T: Config> Pallet<T> {
 /// * `epoch_block_sum` - Sum of blocks in the epoch.
 /// * `max_encryption_period` - Maximum encryption period.
 /// * `_phantom` - PhantomData for the generic type `T`.
+#[derive(Clone, Debug, PartialEq)]
+
 pub struct ConsensusSimulationResult<T: pallet_subspace::Config> {
     pub cumulative_copier_divs: I64F64,
     pub cumulative_avg_delegate_divs: I64F64,
@@ -331,6 +333,19 @@ pub struct ConsensusSimulationResult<T: pallet_subspace::Config> {
     pub black_box_age: u64,
     pub max_encryption_period: u64,
     pub _phantom: PhantomData<T>,
+}
+
+impl<T: pallet_subspace::Config> Default for ConsensusSimulationResult<T> {
+    fn default() -> Self {
+        ConsensusSimulationResult {
+            cumulative_copier_divs: I64F64::from_num(0),
+            cumulative_avg_delegate_divs: I64F64::from_num(0),
+            min_underperf_threshold: I64F64::from_num(0),
+            black_box_age: 0,
+            max_encryption_period: 0,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 /// Determines if the copier's performance is irrational based on cumulative dividends.

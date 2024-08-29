@@ -5,6 +5,7 @@ use crate::mock::*;
 use frame_support::{assert_ok, traits::Currency};
 use log::info;
 use pallet_governance::DaoTreasuryAddress;
+use pallet_offworker::ConsensusSimulationResult;
 use pallet_subnet_emission::{
     subnet_consensus::yuma::{
         self,
@@ -16,6 +17,7 @@ use pallet_subnet_emission::{
 };
 use pallet_subnet_emission_api::SubnetConsensus;
 use pallet_subspace::*;
+use sp_runtime::Percent;
 use substrate_fixed::types::{I32F32, I64F64};
 
 #[test]
@@ -1252,54 +1254,101 @@ fn yuma_does_not_fail_if_module_does_not_have_stake() {
 
 /// Super simple test ensuring it is not profitable to copy weights
 #[test]
-fn foo() {
+fn test_weight_copying_irrationality() {
     new_test_ext().execute_with(|| {
-        register_subnet(0, 0).unwrap();
-        // TODO:
-        let universal_p_emission = to_nano(100);
+        // Parameters
+        const NETUID: u16 = 0;
+        const NUM_MODULES: u16 = 10;
+        const WEIGHT_VECTOR_LENGTH: usize = 4;
+        const COPIER_UID: u16 = 10;
+        const MAX_ITERATIONS: usize = 100;
+        const MODULE_STAKE: u64 = to_nano(10_000);
+        const UNIVERSAL_PENDING_EMISSION: u64 = to_nano(100);
+        const DELEGATION_FEE: Percent = Percent::from_percent(5);
+        const TEMPO: u64 = 100;
 
-        let netuid: u16 = 0;
-        let key = 0;
-        let subnet_name = "subnet1";
-        register_named_subnet(u32::MAX, netuid, subnet_name);
-        SubnetConsensusType::<Test>::set(netuid, Some(SubnetConsensus::Yuma));
+        // Setup the subnet
+        register_subnet(u32::MAX, 0).unwrap();
+        SubnetConsensusType::<Test>::set(NETUID, Some(SubnetConsensus::Yuma));
+        MaxWeightAge::<Test>::insert(NETUID, 10_000);
+
+        // Setup the network
+        zero_min_burn();
+        MaxRegistrationsPerBlock::<Test>::set(1000);
+
         // Register 10 modules
-        let n = 10u16;
-        let stake = to_nano(10_000);
-        register_n_modules(netuid, n, stake, false);
+        register_n_modules(NETUID, NUM_MODULES, MODULE_STAKE, false);
 
-        // Create UID and weights matrixes
-        // Make the higher 5 be validators
-        // Lower 5 be miners
-        let general_uid_vector: Vec<u16> = (0..n).collect();
-        let mut weight_vector: Vec<u16> = vec![1u16; n as usize];
+        let initial_weight_vector = vec![1u16; WEIGHT_VECTOR_LENGTH];
+        let uid_vector: Vec<u16> = (0..WEIGHT_VECTOR_LENGTH as u16).collect();
 
-        // Set the validator weights
-        for key in 0..5 {
-            set_weights(
-                netuid,
-                key,
-                general_uid_vector.clone(),
-                weight_vector.clone(),
-            );
+        // Assert different vector size
+        assert_eq!(initial_weight_vector.len(), uid_vector.len());
+
+        // Set initial weights for miners
+        for key in 0..NUM_MODULES as u16 {
+            if !uid_vector.contains(&key) {
+                set_weights(
+                    NETUID,
+                    key as u32,
+                    uid_vector.clone(),
+                    initial_weight_vector.clone(),
+                );
+            }
         }
 
-        let last_params = YumaParams::<Test>::new(0, universal_p_emission).unwrap();
+        // Add weight copier that the simulated consensus will use
+        add_weight_copier(
+            NETUID,
+            COPIER_UID as u32,
+            uid_vector.clone(),
+            initial_weight_vector.clone(),
+        );
 
-        let last_output = YumaEpoch::<Test>::new(0, last_params).run().unwrap();
+        // Initialize the value of default consensus simulation struct
+        let mut simulation_result: ConsensusSimulationResult<Test> =
+            ConsensusSimulationResult::default();
 
-        let now_params = YumaParams::<Test>::new(0, universal_p_emission).unwrap();
-        let now_output = YumaEpoch::<Test>::new(0, now_params).run().unwrap();
+        for iteration in 0..MAX_ITERATIONS {
+            // Create parameters out of setup that was made before the loop
+            // After first iteration, this will be updated due to dynamically changing weights
+            let last_params = YumaParams::<Test>::new(NETUID, UNIVERSAL_PENDING_EMISSION).unwrap();
+            let last_output = YumaEpoch::<Test>::new(NETUID, last_params).run().unwrap();
 
-        // let foo = pallet_offworker::ConsensusSimulationResult {
-        //     cumulative_copier_divs: I64F64::from_num(0.8),
-        //     cumulative_avg_delegate_divs: I64F64::from_num(1.0),
-        //     min_underperf_threshold: I64F64::from_num(0.1),
-        //     black_box_age: 100,
-        //     max_encryption_period: 1000,
-        //     _phantom: PhantomData,
-        // };
+            update_consensus_simulation_result!(
+                simulation_result,
+                last_output,
+                TEMPO,
+                COPIER_UID,
+                DELEGATION_FEE
+            );
 
-        // pallet_offworker::is_copying_irrational::<Test>(last_output, now_output, foo);
+            // Set dynamically tampered weights here
+            // The original weights are still based on uid_vector and initial_weight_vector
+            // We use a predictable tampering method instead of random
+            for key in 0..NUM_MODULES as u16 {
+                if !uid_vector.contains(&key) {
+                    let tampered_weights: Vec<u16> = initial_weight_vector
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &w)| w + (i as u16 * iteration as u16))
+                        .collect();
+                    set_weights(NETUID, key as u32, uid_vector.clone(), tampered_weights);
+                }
+            }
+
+            // Check if copying is irrational, if so, break the loop
+            if pallet_offworker::is_copying_irrational(simulation_result.clone()) {
+                println!(
+                    "Copying became irrational after {} iterations",
+                    iteration + 1
+                );
+                break;
+            }
+        }
+
+        // Final check outside the loop
+        let is_copy_ira = pallet_offworker::is_copying_irrational(simulation_result.clone());
+        assert!(is_copy_ira, "Copying should have become irrational");
     });
 }
