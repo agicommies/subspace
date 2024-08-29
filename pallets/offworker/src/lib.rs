@@ -351,7 +351,7 @@ pub struct ConsensusSimulationResult<T: pallet_subspace::Config> {
 /// The function compares `cumulative_copier_divs` against an adjusted
 /// `cumulative_avg_delegate_divs`, taking into account the `min_underperf_threshold`.
 #[must_use]
-pub fn can_decrypt<T: pallet_subspace::Config>(
+pub fn is_copying_irrational<T: pallet_subspace::Config>(
     consensus_result: ConsensusSimulationResult<T>,
 ) -> bool {
     if consensus_result.black_box_age >= consensus_result.max_encryption_period {
