@@ -1261,7 +1261,7 @@ fn test_weight_copying_irrationality() {
         const NUM_MODULES: u16 = 10;
         const WEIGHT_VECTOR_LENGTH: usize = 4;
         const COPIER_UID: u16 = 10;
-        const MAX_ITERATIONS: usize = 100;
+        const MAX_ITERATIONS: usize = 40;
         const MODULE_STAKE: u64 = to_nano(10_000);
         const UNIVERSAL_PENDING_EMISSION: u64 = to_nano(100);
         const DELEGATION_FEE: Percent = Percent::from_percent(5);
@@ -1271,6 +1271,7 @@ fn test_weight_copying_irrationality() {
         register_subnet(u32::MAX, 0).unwrap();
         SubnetConsensusType::<Test>::set(NETUID, Some(SubnetConsensus::Yuma));
         MaxWeightAge::<Test>::insert(NETUID, 10_000);
+        Tempo::<Test>::insert(NETUID, TEMPO as u16);
 
         // Setup the network
         zero_min_burn();
@@ -1279,6 +1280,7 @@ fn test_weight_copying_irrationality() {
         // Register 10 modules
         register_n_modules(NETUID, NUM_MODULES, MODULE_STAKE, false);
 
+        step_block(1);
         let initial_weight_vector = vec![1u16; WEIGHT_VECTOR_LENGTH];
         let uid_vector: Vec<u16> = (0..WEIGHT_VECTOR_LENGTH as u16).collect();
 
@@ -1313,6 +1315,7 @@ fn test_weight_copying_irrationality() {
             // Create parameters out of setup that was made before the loop
             // After first iteration, this will be updated due to dynamically changing weights
             let last_params = YumaParams::<Test>::new(NETUID, UNIVERSAL_PENDING_EMISSION).unwrap();
+
             let last_output = YumaEpoch::<Test>::new(NETUID, last_params).run().unwrap();
 
             update_consensus_simulation_result!(
@@ -1323,19 +1326,45 @@ fn test_weight_copying_irrationality() {
                 DELEGATION_FEE
             );
 
-            // Set dynamically tampered weights here
-            // The original weights are still based on uid_vector and initial_weight_vector
-            // We use a predictable tampering method instead of random
+            // Set dynamically changing weights
+            // We gradually increase the weights over time:
+            // - Each weight starts at its initial value (the same copier is setting)
+            // - In each iteration, we increase each weight by a small amount
+            // - The increase is based on the weight's position (index) and the current iteration
+            // - This creates a slow, steady growth in weights, with later weights growing slightly
+            //   faster
+            //
+            // Example:
+            // Let's assume WEIGHT_VECTOR_LENGTH is 4, and initial_weight_vector is [1, 1, 1, 1]
+            //
+            // After a few iterations, the weights might look like this:
+            // Iteration 0: [1, 1, 1, 1] (initial weights)
+            // Iteration 1: [1, 1, 2, 2]
+            // Iteration 2: [1, 2, 2, 3]
+            // Iteration 3: [1, 2, 3, 3]
+            // Iteration 4: [2, 3, 3, 4]
+            //
+            // Notice how:
+            // 1. All weights start at 1
+            // 2. Each iteration, some weights increase
+            // 3. Later weights (at higher indices) tend to increase faster
+            // 4. The growth is gradual and steady
+            //
+            // This pattern creates a divergence from the copier's weights over time,
+            // which should eventually make copying irrational.
             for key in 0..NUM_MODULES as u16 {
                 if !uid_vector.contains(&key) {
                     let tampered_weights: Vec<u16> = initial_weight_vector
                         .iter()
                         .enumerate()
-                        .map(|(i, &w)| w + (i as u16 * iteration as u16))
+                        .map(|(i, &w)| w + (i as u16 + iteration as u16) / 2)
                         .collect();
+                    dbg!(&tampered_weights);
                     set_weights(NETUID, key as u32, uid_vector.clone(), tampered_weights);
                 }
             }
+
+            dbg!(&simulation_result, iteration);
 
             // Check if copying is irrational, if so, break the loop
             if pallet_offworker::is_copying_irrational(simulation_result.clone()) {
@@ -1347,6 +1376,7 @@ fn test_weight_copying_irrationality() {
             }
         }
 
+        dbg!(&simulation_result);
         // Final check outside the loop
         let is_copy_ira = pallet_offworker::is_copying_irrational(simulation_result.clone());
         assert!(is_copy_ira, "Copying should have become irrational");

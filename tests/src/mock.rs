@@ -16,7 +16,7 @@ use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
     subnet::SubnetChangeset, Address, BurnConfig, DefaultKey, DefaultSubnetParams, Dividends,
     Emission, Incentive, LastUpdate, MaxRegistrationsPerBlock, Name, SubnetBurn, SubnetBurnConfig,
-    SubnetParams, Tempo, TotalStake, N,
+    SubnetParams, Tempo, TotalStake, Uids, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{prelude::collections::BTreeSet, TypeInfo};
@@ -24,9 +24,10 @@ use sp_core::{sr25519, ConstU16, H256};
 use sp_runtime::{
     generic::UncheckedExtrinsic,
     traits::{AccountIdConversion, BlakeTwo256, IdentifyAccount, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, KeyTypeId,
+    BuildStorage, DispatchError, DispatchResult, KeyTypeId, Percent,
 };
 use std::cell::RefCell;
+use substrate_fixed::types::I64F64;
 
 frame_support::construct_runtime!(
     pub enum Test {
@@ -488,6 +489,7 @@ pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>
     let measured_stake_amt = MeasuredStakeAmount::<Test>::get();
     let copier_stake = measured_stake_amt.mul_floor(subnet_stake);
     register_module(netuid, key, copier_stake, false).unwrap();
+    step_block(1);
     set_weights(netuid, key, uids, values);
 }
 
@@ -766,33 +768,57 @@ macro_rules! update_params {
     }};
 }
 
+pub fn calculate_avg_delegate_divs(
+    netuid: &u16,
+    dividends: &[u16],
+    copier_uid: u16,
+    delegation_fee: Percent,
+) -> I64F64 {
+    let subnet_keys = Uids::<Test>::iter_prefix(netuid).map(|(key, _)| key).collect::<Vec<_>>();
+    let stakes: Vec<u64> =
+        subnet_keys.iter().map(|key| SubspaceMod::get_delegated_stake(key)).collect();
+
+    let is_valid_div = |&(i, &div): &(usize, &u16)| i != copier_uid as usize && div != 0;
+
+    let total_stake: I64F64 = stakes
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| i != copier_uid as usize)
+        .map(|(_, &stake)| I64F64::from_num(stake))
+        .sum();
+
+    let total_dividends: I64F64 = dividends
+        .iter()
+        .enumerate()
+        .filter(is_valid_div)
+        .map(|(_, &div)| I64F64::from_num(div))
+        .sum();
+
+    let average_dividends = total_dividends / total_stake;
+
+    let divs_without_fee = average_dividends
+        * (I64F64::from_num(100 - delegation_fee.deconstruct()) / I64F64::from_num(100));
+
+    let copier_stake = I64F64::from_num(stakes[copier_uid as usize]);
+
+    divs_without_fee * copier_stake
+}
+
 macro_rules! update_consensus_simulation_result {
     ($result:expr, $yuma_output:expr, $tempo:expr, $copier_uid:expr, $delegation_fee:expr) => {{
-        let delegation_fee = $delegation_fee;
-        let avg_delegate_divs = {
-            let sum: u64 = $yuma_output
-                .dividends
-                .iter()
-                .enumerate()
-                .filter(|&(i, _)| i != $copier_uid as usize)
-                .map(|(_, &div)| div as u64)
-                .sum();
-            let count = $yuma_output.dividends.len() - 1;
-            if count > 0 {
-                let avg = sum / count as u64;
-                I64F64::from_num(avg)
-                    * (I64F64::from_num(0) - I64F64::from_num(delegation_fee.deconstruct()))
-            } else {
-                I64F64::from_num(0)
-            }
-        };
+        let avg_delegate_divs = calculate_avg_delegate_divs(
+            &$yuma_output.subnet_id,
+            &$yuma_output.dividends,
+            $copier_uid,
+            $delegation_fee,
+        );
         let copier_divs = I64F64::from_num($yuma_output.dividends[$copier_uid as usize]);
 
         $result.cumulative_copier_divs += copier_divs;
         $result.cumulative_avg_delegate_divs += avg_delegate_divs;
         $result.black_box_age += $tempo;
-        $result.max_encryption_period = 1_000; // Sample
-        $result.min_underperf_threshold = I64F64::from_num(40); // Sample
+        $result.max_encryption_period = 3_000; // Sample
+        $result.min_underperf_threshold = I64F64::from_num(0.1); // Sample
     }};
 }
 
