@@ -24,6 +24,7 @@ sp-runtime.workspace = true
 sp-arithmetic.workspace = true
 bty.workspace = true
 log.workspace = true
+rand.workspace = true
 
 pallet-governance = { path = "../pallets/governance", features = ["std"] }
 pallet-subspace = { path = "../pallets/subspace", features = ["std"] }

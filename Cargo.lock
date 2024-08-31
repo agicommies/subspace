@@ -9443,6 +9443,7 @@ dependencies = [
  "pallet-subnet-emission-api",
  "pallet-subspace",
  "parity-scale-codec",
+ "rand",
  "scale-info",
  "sp-arithmetic",
  "sp-core",

@@ -768,60 +768,6 @@ macro_rules! update_params {
     }};
 }
 
-pub fn calculate_avg_delegate_divs(
-    netuid: &u16,
-    dividends: &[u16],
-    copier_uid: u16,
-    delegation_fee: Percent,
-) -> I64F64 {
-    let subnet_keys = Uids::<Test>::iter_prefix(netuid).map(|(key, _)| key).collect::<Vec<_>>();
-    let stakes: Vec<u64> =
-        subnet_keys.iter().map(|key| SubspaceMod::get_delegated_stake(key)).collect();
-
-    let is_valid_div = |&(i, &div): &(usize, &u16)| i != copier_uid as usize && div != 0;
-
-    let total_stake: I64F64 = stakes
-        .iter()
-        .enumerate()
-        .filter(|&(i, _)| i != copier_uid as usize)
-        .map(|(_, &stake)| I64F64::from_num(stake))
-        .sum();
-
-    let total_dividends: I64F64 = dividends
-        .iter()
-        .enumerate()
-        .filter(is_valid_div)
-        .map(|(_, &div)| I64F64::from_num(div))
-        .sum();
-
-    let average_dividends = total_dividends / total_stake;
-
-    let divs_without_fee = average_dividends
-        * (I64F64::from_num(100 - delegation_fee.deconstruct()) / I64F64::from_num(100));
-
-    let copier_stake = I64F64::from_num(stakes[copier_uid as usize]);
-
-    divs_without_fee * copier_stake
-}
-
-macro_rules! update_consensus_simulation_result {
-    ($result:expr, $yuma_output:expr, $tempo:expr, $copier_uid:expr, $delegation_fee:expr) => {{
-        let avg_delegate_divs = calculate_avg_delegate_divs(
-            &$yuma_output.subnet_id,
-            &$yuma_output.dividends,
-            $copier_uid,
-            $delegation_fee,
-        );
-        let copier_divs = I64F64::from_num($yuma_output.dividends[$copier_uid as usize]);
-
-        $result.cumulative_copier_divs += copier_divs;
-        $result.cumulative_avg_delegate_divs += avg_delegate_divs;
-        $result.black_box_age += $tempo;
-        $result.max_encryption_period = 3_000; // Sample
-        $result.min_underperf_threshold = I64F64::from_num(0.1); // Sample
-    }};
-}
-
 macro_rules! assert_ok {
     ( $x:expr $(,)? ) => {
         match $x {
@@ -848,5 +794,4 @@ macro_rules! assert_in_range {
 
 pub(crate) use assert_in_range;
 pub(crate) use assert_ok;
-pub(crate) use update_consensus_simulation_result;
 pub(crate) use update_params;
