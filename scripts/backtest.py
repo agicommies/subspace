@@ -1,16 +1,17 @@
+from substrateinterface.storage import StorageKey
 import json
 import argparse
 import os
 from typing import Any
 from substrateinterface import SubstrateInterface
+from substrateinterface.exceptions import SubstrateRequestException
 
 QUERY_URL: str = "wss://bittensor-finney.api.onfinality.io/public"
 STANDARD_MODULE: str = "SubtensorModule"
-SUBNET = 8
+SUBNET = 1
 TEMPO = 100
 START_BLOCK = 3_700_000
-ITER_EPOCHS = 10
-
+ITER_EPOCHS = 50
 
 
 def query_map_values(
@@ -21,7 +22,7 @@ def query_map_values(
     block_hash: str | None = None
 ) -> dict[str, Any]:
     result = client.query_map(
-        module=module, storage_function=storage_function, params=params, block_hash=block_hash # type: ignore
+        module=module, storage_function=storage_function, params=params, block_hash=block_hash  # type: ignore
     )
     return {str(k.value): v.value for k, v in result}
 
@@ -53,8 +54,40 @@ def get_stake(client: SubstrateInterface, block_hash: str) -> dict[str, int]:
 
     return stake
 
+def get_last_update(client: SubstrateInterface, block_hash: str) -> dict[str, str]:
+    last_update = query_map_values(
+        client, STANDARD_MODULE, "LastUpdate", [], block_hash
+    )[str(SUBNET)]
 
-def get_weights(client: SubstrateInterface, block_hash: str) -> dict[str, dict[str, list[tuple[int, int]]]]:
+    # uid to last update value
+    sane_last_update: dict[str, str] = {}
+
+    for uid, value in enumerate(last_update):
+        sane_last_update[str(uid)] = value
+
+    return sane_last_update
+
+
+def get_registration_blocks(
+    client: SubstrateInterface, block_hash: str
+) -> dict[str, str]:
+
+    registration_blocks = query_map_values(
+        client, STANDARD_MODULE, "BlockAtRegistration", [SUBNET], block_hash
+    )
+
+    # uid to registration block value
+    sane_registration_blocks: dict[str, str] = {}
+
+    for uid, reg_block in registration_blocks.items():
+        sane_registration_blocks[str(uid)] = reg_block
+
+    return sane_registration_blocks
+
+
+def get_epoch_data(
+    client: SubstrateInterface, block_hash: str
+) -> tuple[dict[str, dict[str, list[tuple[int, int]]]], dict[str, str], dict[str, str]]:
     weights: dict[str, dict[str, list[tuple[int, int]]]] = {}
 
     subnet_weights = query_map_values(
@@ -65,7 +98,10 @@ def get_weights(client: SubstrateInterface, block_hash: str) -> dict[str, dict[s
         for uid, w in subnet_weights.items()
     }
 
-    return weights
+    last_update = get_last_update(client, block_hash)
+    registration_blocks = get_registration_blocks(client, block_hash)
+
+    return weights, last_update, registration_blocks
 
 
 def main() -> None:
@@ -88,15 +124,25 @@ def main() -> None:
     data: dict[str, Any] = {}
 
     # Get initial stake from START_BLOCK
+    print("hash")
     start_block_hash = client.get_block_hash(START_BLOCK)
-    data['stake'] = get_stake(client, start_block_hash)
+    data["stake"] = get_stake(client, start_block_hash)
+    print("stake")
 
-    data['weights'] = {}
+    data["weights"] = {}
+    data["last_update"] = {}
+    data["registration_blocks"] = {}
     for i in range(ITER_EPOCHS):
         block_number = START_BLOCK + (i * TEMPO)
         block_hash = client.get_block_hash(block_number)
-        data['weights'][str(block_number)] = get_weights(client, block_hash)
-        print(f"Collected weights for block {block_number}")
+        weights, last_update, registration_blocks = get_epoch_data(
+            client, block_hash)
+        data["weights"][str(block_number)] = weights
+        data["last_update"][str(block_number)] = last_update
+        data["registration_blocks"][str(block_number)] = registration_blocks
+        print(
+            f"Collected weights, last update, and registration blocks for block {block_number}"
+        )
 
     print(f"Writing snapshot to {output_path}")
     os.makedirs(args.directory, exist_ok=True)

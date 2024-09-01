@@ -135,33 +135,46 @@ pub fn weighted_median_col_sparse(
     let zero: I32F32 = I32F32::from_num(0);
     let mut use_stake: Vec<I32F32> = stake.iter().copied().filter(|&s| s > zero).collect();
     inplace_normalize(&mut use_stake);
+    dbg!(&use_stake); // Log normalized stakes
+
     let stake_sum: I32F32 = use_stake.iter().sum();
     let stake_idx: Vec<usize> = (0..use_stake.len()).collect();
     let minority: I32F32 = stake_sum.saturating_sub(majority);
     let mut use_score: Vec<Vec<I32F32>> = vec![vec![zero; use_stake.len()]; columns as usize];
     let mut median: Vec<I32F32> = vec![zero; columns as usize];
     let mut k: usize = 0;
+
+    dbg!(&score);
+
     for r in 0..rows {
         let Some(stake_r) = stake.get(r) else {
+            dbg!("Skipping row due to missing stake", r);
             continue;
         };
         let Some(score_r) = score.get(r) else {
+            dbg!("Skipping row due to missing score", r);
             continue;
         };
         if *stake_r <= zero {
+            dbg!("Skipping row due to zero or negative stake", r, stake_r);
             continue;
         }
+        dbg!("Processing row", r, score_r);
         for (c, val) in score_r.iter() {
             let Some(use_score_c) = use_score.get_mut(*c as usize) else {
+                dbg!("Column index out of bounds", c);
                 continue;
             };
             let Some(use_score_c_k) = use_score_c.get_mut(k) else {
+                dbg!("Row index out of bounds", k);
                 continue;
             };
+            dbg!("Setting score", r, c, val);
             *use_score_c_k = *val;
         }
         k = k.saturating_add(1);
     }
+
     for c in 0..columns as usize {
         let Some(median_c) = median.get_mut(c) else {
             continue;
@@ -178,6 +191,7 @@ pub fn weighted_median_col_sparse(
             stake_sum,
         );
     }
+
     median
 }
 

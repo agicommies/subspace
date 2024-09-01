@@ -85,6 +85,9 @@ impl<T: Config> YumaEpoch<T> {
         let active_stake = self.compute_active_stake(&inactive, &stake);
         log::trace!("final active stake: {active_stake:?}");
 
+        // dbg!(weights.as_ref());
+        // dbg!(active_stake.as_ref());
+
         let ConsensusAndTrust {
             consensus,
             validator_trust,
@@ -291,6 +294,7 @@ impl<T: Config> YumaEpoch<T> {
 
         // Normalize remaining weights.
         inplace_row_normalize_sparse(&mut weights);
+
         log::trace!("  normalized weights: {weights:?}");
 
         Some(WeightsVal::unchecked_from_inner(weights))
@@ -329,6 +333,9 @@ impl<T: Config> YumaEpoch<T> {
             self.module_count(),
             self.params.kappa,
         );
+
+        dbg!(consensus.clone());
+
         log::trace!("final consensus: {consensus:?}");
 
         // Compute preranks: r_j = SUM(i) w_ij * s_i
@@ -336,6 +343,7 @@ impl<T: Config> YumaEpoch<T> {
         log::trace!("final preranks: {preranks:?}");
 
         *weights = WeightsVal::unchecked_from_inner(col_clip_sparse(weights.as_ref(), &consensus));
+
         log::trace!("final consensus weights: {weights:?}");
 
         let validator_trust = row_sum_sparse(weights.as_ref());
@@ -385,6 +393,9 @@ impl<T: Config> YumaEpoch<T> {
         let mut bonds = self.modules.bonds.clone();
         log::trace!("  original bonds: {bonds:?}");
 
+        // dbg!(&active_stake);
+        // dbg!(&incentives);
+
         // Remove bonds referring to deregistered modules.
         bonds = vec_mask_sparse_matrix(
             &bonds,
@@ -392,6 +403,7 @@ impl<T: Config> YumaEpoch<T> {
             &self.modules.block_at_registration,
             |updated, registered| updated <= registered,
         )?;
+
         log::trace!("  no deregistered modules bonds: {bonds:?}");
 
         // Normalize remaining bonds: sum_i b_ij = 1.
@@ -414,6 +426,9 @@ impl<T: Config> YumaEpoch<T> {
         let alpha = I32F32::from_num(1).saturating_sub(I32F32::from_num(bonds_moving_average));
         let mut ema_bonds = mat_ema_sparse(&bonds_delta, &bonds, alpha);
         log::trace!("  original ema bonds: {ema_bonds:?}");
+
+        // dbg!(&ema_bonds);
+        // dbg!(&incentives);
 
         // Normalize EMA bonds.
         inplace_col_normalize_sparse(&mut ema_bonds, self.module_count()); // sum_i b_ij = 1

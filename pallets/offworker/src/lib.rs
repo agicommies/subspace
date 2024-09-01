@@ -10,7 +10,7 @@ use frame_system::{
 };
 use pallet_subnet_emission::subnet_consensus::yuma::YumaOutput;
 use pallet_subspace::{
-    MaxEncryptionPeriod, MinUnderperformanceThreshold, Pallet as SubspaceModule,
+    Active, MaxEncryptionPeriod, MinUnderperformanceThreshold, Pallet as SubspaceModule,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::prelude::marker::PhantomData;
@@ -373,14 +373,15 @@ pub fn calculate_avg_delegate_divs<T: pallet_subspace::Config>(
             (I64F64::from_num(0), I64F64::from_num(0)),
             |(stake_acc, div_acc), (i, &div)| {
                 (
-                    stake_acc + I64F64::from_num(get_stake_for_uid::<T>(netuid, i as u16)),
+                    stake_acc + I64F64::from_num(get_delegated_stake_on_uid::<T>(netuid, i as u16)),
                     div_acc + I64F64::from_num(div),
                 )
             },
         );
 
+    dbg!(total_stake);
     let average_dividends = total_dividends / total_stake;
-    let copier_stake = I64F64::from_num(get_stake_for_uid::<T>(netuid, copier_uid));
+    let copier_stake = I64F64::from_num(get_delegated_stake_on_uid::<T>(netuid, copier_uid));
 
     average_dividends * fee_factor * copier_stake
 }
@@ -388,7 +389,7 @@ pub fn calculate_avg_delegate_divs<T: pallet_subspace::Config>(
 // TODO:
 // get rid of this shit, make it more efficient
 #[inline]
-pub fn get_stake_for_uid<T: pallet_subspace::Config>(netuid: u16, module_uid: u16) -> u64 {
+pub fn get_delegated_stake_on_uid<T: pallet_subspace::Config>(netuid: u16, module_uid: u16) -> u64 {
     SubspaceModule::<T>::get_key_for_uid(netuid, module_uid)
         .map_or(0, |key| SubspaceModule::<T>::get_delegated_stake(&key))
 }

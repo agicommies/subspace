@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+use core::panic;
 use frame_support::{
     ensure, parameter_types,
     traits::{Currency, Everything, Get, Hooks},
@@ -14,9 +15,10 @@ use pallet_governance_api::*;
 use pallet_offworker::{crypto::Signature, Call as OffworkerCall, MeasuredStakeAmount};
 use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
-    subnet::SubnetChangeset, Address, BurnConfig, DefaultKey, DefaultSubnetParams, Dividends,
-    Emission, Incentive, LastUpdate, MaxRegistrationsPerBlock, Name, SubnetBurn, SubnetBurnConfig,
-    SubnetParams, Tempo, TotalStake, N,
+    subnet::{self, SubnetChangeset},
+    Active, Address, BurnConfig, DefaultKey, DefaultSubnetParams, Dividends, Emission, Incentive,
+    LastUpdate, MaxRegistrationsPerBlock, Name, SubnetBurn, SubnetBurnConfig, SubnetParams, Tempo,
+    TotalStake, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{prelude::collections::BTreeSet, TypeInfo};
@@ -483,7 +485,16 @@ pub fn get_total_subnet_balance(netuid: u16) -> u64 {
 /// Appends weight copier validator
 pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
     // Here, we should get stake from people who have validator permits, ONLY !
-    let subnet_stake = SubspaceMod::get_total_subnet_stake(netuid);
+
+    // Sums up all validators stake
+    let subnet_stake = Active::<Test>::get(netuid)
+        .iter()
+        .enumerate()
+        .filter(|(_, &is_active)| is_active)
+        .map(|(uid, _)| pallet_offworker::get_delegated_stake_on_uid::<Test>(netuid, uid as u16))
+        .sum();
+
+    dbg!(subnet_stake);
 
     let measured_stake_amt = MeasuredStakeAmount::<Test>::get();
     let copier_stake = measured_stake_amt.mul_floor(subnet_stake);
