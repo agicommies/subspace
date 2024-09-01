@@ -9,7 +9,9 @@ use frame_system::{
     pallet_prelude::BlockNumberFor,
 };
 use pallet_subnet_emission::subnet_consensus::yuma::YumaOutput;
-use pallet_subspace::Pallet as SubspaceModule;
+use pallet_subspace::{
+    MaxEncryptionPeriod, MinUnderperformanceThreshold, Pallet as SubspaceModule,
+};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::prelude::marker::PhantomData;
 use sp_core::crypto::KeyTypeId;
@@ -436,8 +438,9 @@ impl<T: pallet_subspace::Config> ConsensusSimulationResult<T> {
         copier_uid: u16,
         delegation_fee: Percent,
     ) {
+        let netuid = yuma_output.subnet_id;
         let avg_delegate_divs = calculate_avg_delegate_divs::<T>(
-            yuma_output.subnet_id,
+            netuid,
             &yuma_output.dividends,
             copier_uid,
             delegation_fee,
@@ -450,7 +453,7 @@ impl<T: pallet_subspace::Config> ConsensusSimulationResult<T> {
         self.black_box_age += tempo;
         // TODO:
         // make configurable as subnet params
-        self.max_encryption_period = 3_000; // sample for now
-        self.min_underperf_threshold = I64F64::from_num(0.1); // sample for now
+        self.max_encryption_period = MaxEncryptionPeriod::<T>::get(netuid);
+        self.min_underperf_threshold = MinUnderperformanceThreshold::<T>::get(netuid);
     }
 }

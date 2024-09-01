@@ -9445,6 +9445,7 @@ dependencies = [
  "parity-scale-codec",
  "rand",
  "scale-info",
+ "serde_json",
  "sp-arithmetic",
  "sp-core",
  "sp-io",

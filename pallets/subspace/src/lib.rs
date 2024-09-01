@@ -71,6 +71,7 @@ pub mod pallet {
     use sp_arithmetic::per_things::Percent;
     use sp_core::{ConstU64, ConstU8};
     pub use sp_std::{vec, vec::Vec};
+    use substrate_fixed::types::I64F64;
 
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(12);
 
@@ -320,6 +321,19 @@ pub mod pallet {
 
     #[pallet::storage] // --- ITEM ( subnet_burn )
     pub type SubnetBurn<T: Config> = StorageValue<_, u64, ValueQuery, DefaultSubnetBurn<T>>;
+
+    #[pallet::storage]
+    pub type MaxEncryptionPeriod<T: Config> =
+        StorageMap<_, Identity, u16, u64, ValueQuery, ConstU64<2_000>>;
+
+    #[pallet::type_value]
+    pub fn DefaultMinUnderperformanceThreshold() -> I64F64 {
+        I64F64::from_num(0.1)
+    }
+
+    #[pallet::storage]
+    pub type MinUnderperformanceThreshold<T: Config> =
+        StorageMap<_, Identity, u16, I64F64, ValueQuery, DefaultMinUnderperformanceThreshold>;
 
     // ---------------------------------
     // Subnet PARAMS

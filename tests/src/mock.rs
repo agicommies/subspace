@@ -16,7 +16,7 @@ use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
     subnet::SubnetChangeset, Address, BurnConfig, DefaultKey, DefaultSubnetParams, Dividends,
     Emission, Incentive, LastUpdate, MaxRegistrationsPerBlock, Name, SubnetBurn, SubnetBurnConfig,
-    SubnetParams, Tempo, TotalStake, Uids, N,
+    SubnetParams, Tempo, TotalStake, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{prelude::collections::BTreeSet, TypeInfo};
@@ -24,10 +24,9 @@ use sp_core::{sr25519, ConstU16, H256};
 use sp_runtime::{
     generic::UncheckedExtrinsic,
     traits::{AccountIdConversion, BlakeTwo256, IdentifyAccount, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, KeyTypeId, Percent,
+    BuildStorage, DispatchError, DispatchResult, KeyTypeId,
 };
 use std::cell::RefCell;
-use substrate_fixed::types::I64F64;
 
 frame_support::construct_runtime!(
     pub enum Test {
