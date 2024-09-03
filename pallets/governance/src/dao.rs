@@ -49,8 +49,11 @@ impl<T: Config> Pallet<T> {
             Error::<T>::NotEnoughBalanceToApply
         );
 
-        let removed_balance = PalletSubspace::<T>::u64_to_balance(application_cost)
-            .ok_or(Error::<T>::CouldNotConvertToBalance)?;
+        let Some(removed_balance_as_currency) =
+            PalletSubspace::<T>::u64_to_balance(application_cost)
+        else {
+            return Err(Error::<T>::InvalidCurrencyConversionValue.into());
+        };
 
         let application_id = Self::get_next_application_id();
         let application = CuratorApplication {
@@ -62,7 +65,7 @@ impl<T: Config> Pallet<T> {
             application_cost,
         };
 
-        PalletSubspace::<T>::remove_balance_from_account(&key, removed_balance)?;
+        PalletSubspace::<T>::remove_balance_from_account(&key, removed_balance_as_currency)?;
 
         CuratorApplications::<T>::insert(application_id, application);
 
