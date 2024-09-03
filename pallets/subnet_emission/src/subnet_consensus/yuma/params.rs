@@ -5,7 +5,8 @@ use sp_std::collections::btree_map::BTreeMap;
 use frame_support::DebugNoBound;
 use pallet_subspace::{
     math::*, BalanceOf, Bonds, BondsMovingAverage, Config, Founder, Kappa, Keys, LastUpdate,
-    MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace, ValidatorPermits, Vec, Weights,
+    MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace, UseWeightsEncrytyption,
+    ValidatorPermits, Vec, Weights,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
@@ -31,6 +32,7 @@ pub struct YumaParams<T: Config> {
 
     pub current_block: u64,
     pub activity_cutoff: u64,
+    pub use_weights_encryption: bool,
     pub max_allowed_validators: Option<u16>,
     pub bonds_moving_average: u64,
 }
@@ -172,6 +174,7 @@ impl<T: Config> YumaParams<T> {
             founder_key,
             founder_emission,
 
+            use_weights_encryption: UseWeightsEncrytyption::<T>::get(subnet_id),
             current_block: PalletSubspace::<T>::get_current_block_number(),
             activity_cutoff: MaxWeightAge::<T>::get(subnet_id),
             max_allowed_validators: MaxAllowedValidators::<T>::get(subnet_id),

@@ -5311,6 +5311,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "num-traits",
  "pallet-balances",
  "pallet-governance-api",
  "pallet-subnet-emission-api",

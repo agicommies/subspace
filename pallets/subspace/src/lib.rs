@@ -328,12 +328,15 @@ pub mod pallet {
 
     #[pallet::type_value]
     pub fn DefaultMinUnderperformanceThreshold() -> I64F64 {
-        I64F64::from_num(0.1)
+        I64F64::from_num(0)
     }
 
     #[pallet::storage]
     pub type MinUnderperformanceThreshold<T: Config> =
         StorageMap<_, Identity, u16, I64F64, ValueQuery, DefaultMinUnderperformanceThreshold>;
+
+    #[pallet::storage]
+    pub type UseWeightsEncrytyption<T: Config> = StorageMap<_, Identity, u16, bool, ValueQuery>;
 
     // ---------------------------------
     // Subnet PARAMS

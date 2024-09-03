@@ -85,9 +85,6 @@ impl<T: Config> YumaEpoch<T> {
         let active_stake = self.compute_active_stake(&inactive, &stake);
         log::trace!("final active stake: {active_stake:?}");
 
-        // dbg!(weights.as_ref());
-        // dbg!(active_stake.as_ref());
-
         let ConsensusAndTrust {
             consensus,
             validator_trust,
@@ -104,7 +101,7 @@ impl<T: Config> YumaEpoch<T> {
             ema_bonds,
             dividends,
         } = self
-            .compute_bonds_and_dividends(&weights, &active_stake, &incentives)
+            .compute_bonds_and_dividends(&consensus, &weights, &active_stake, &incentives)
             .ok_or(EmissionError::Other("bonds storage is broken"))?;
 
         let Emissions {
@@ -334,8 +331,6 @@ impl<T: Config> YumaEpoch<T> {
             self.params.kappa,
         );
 
-        dbg!(consensus.clone());
-
         log::trace!("final consensus: {consensus:?}");
 
         // Compute preranks: r_j = SUM(i) w_ij * s_i
@@ -383,8 +378,45 @@ impl<T: Config> YumaEpoch<T> {
         }
     }
 
+    fn calculate_ema_bonds(
+        &self,
+        bonds_delta: &[Vec<(u16, I32F32)>],
+        bonds: &[Vec<(u16, I32F32)>],
+        consensus: &[I32F32],
+    ) -> Vec<Vec<(u16, I32F32)>> {
+        let bonds_moving_average = I64F64::from_num(self.params.bonds_moving_average)
+            .checked_div(I64F64::from_num(1_000_000))
+            .unwrap_or_default();
+        let default_alpha =
+            I32F32::from_num(1).saturating_sub(I32F32::from_num(bonds_moving_average));
+
+        if !self.params.use_weights_encryption {
+            return mat_ema_sparse(bonds_delta, bonds, default_alpha);
+        }
+
+        let consensus_high = quantile(consensus, 0.75);
+        let consensus_low = quantile(consensus, 0.25);
+
+        if consensus_high <= consensus_low && consensus_high == 0 && consensus_low >= 0 {
+            return mat_ema_sparse(bonds_delta, bonds, default_alpha);
+        }
+
+        log::trace!("Using Liquid Alpha");
+        let (alpha_low, alpha_high) = get_alpha_values_32(self.subnet_id);
+        log::trace!("alpha_low: {:?} alpha_high: {:?}", alpha_low, alpha_high);
+
+        let (a, b) =
+            calculate_logistic_params(alpha_high, alpha_low, consensus_high, consensus_low);
+        let alpha = compute_alpha_values(consensus, a, b);
+        let clamped_alpha: Vec<I32F32> =
+            alpha.into_iter().map(|a| a.clamp(alpha_low, alpha_high)).collect();
+
+        mat_ema_alpha_vec_sparse(bonds_delta, bonds, &clamped_alpha)
+    }
+
     fn compute_bonds_and_dividends(
         &self,
+        consensus: &ConsensusVal,
         weights: &WeightsVal,
         active_stake: &ActiveStake,
         incentives: &IncentivesVal,
@@ -392,9 +424,6 @@ impl<T: Config> YumaEpoch<T> {
         // Access network bonds.
         let mut bonds = self.modules.bonds.clone();
         log::trace!("  original bonds: {bonds:?}");
-
-        // dbg!(&active_stake);
-        // dbg!(&incentives);
 
         // Remove bonds referring to deregistered modules.
         bonds = vec_mask_sparse_matrix(
@@ -419,16 +448,10 @@ impl<T: Config> YumaEpoch<T> {
         log::trace!("  normalized bonds delta: {bonds_delta:?}");
 
         // Compute bonds moving average.
-        let bonds_moving_average = I64F64::from_num(self.params.bonds_moving_average)
-            .checked_div(I64F64::from_num(1_000_000))
-            .unwrap_or_default();
-        log::trace!("  bonds moving average: {bonds_moving_average}");
-        let alpha = I32F32::from_num(1).saturating_sub(I32F32::from_num(bonds_moving_average));
-        let mut ema_bonds = mat_ema_sparse(&bonds_delta, &bonds, alpha);
-        log::trace!("  original ema bonds: {ema_bonds:?}");
+        let mut ema_bonds =
+            Self::calculate_ema_bonds(&self, &bonds_delta, &bonds, &consensus.clone().into_inner());
 
-        // dbg!(&ema_bonds);
-        // dbg!(&incentives);
+        log::trace!("  original ema bonds: {ema_bonds:?}");
 
         // Normalize EMA bonds.
         inplace_col_normalize_sparse(&mut ema_bonds, self.module_count()); // sum_i b_ij = 1
