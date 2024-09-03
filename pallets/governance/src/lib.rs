@@ -442,13 +442,13 @@ pub mod pallet {
         /// The application data is too small or empty.
         ApplicationTooSmall,
         /// The application data is too large, exceeding the maximum allowed size.
-        ApplicationTooLarge,
+        InvalidApplicationSize,
         /// The application is not in a pending state.
         ApplicationNotPending,
         /// The application data is invalid or malformed.
         InvalidApplication,
         /// The account doesn't have enough balance to submit an application.
-        NotEnoughtBalnceToApply,
+        NotEnoughBalanceToApply,
         /// The recommended weight for the application is invalid.
         InvalidRecommendedWeight,
         /// The operation can only be performed by the curator.
