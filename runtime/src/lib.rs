@@ -111,7 +111,7 @@ pub mod opaque {
     }
 }
 
-pub type Migrations = pallet_subspace::migrations::v13::MigrateToV13<Runtime>;
+pub type Migrations = pallet_governance::migrations::v2::MigrateToV2<Runtime>;
 
 // To learn more about runtime versioning, see:
 // https://docs.substrate.io/main-docs/build/upgrade#runtime-versioning

@@ -14,6 +14,7 @@ pub struct CuratorApplication<T: Config> {
     pub data: BoundedVec<u8, ConstU32<256>>,
     pub status: ApplicationStatus,
     pub application_cost: u64,
+    pub block_number: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo, Decode, Encode)]
@@ -56,6 +57,8 @@ impl<T: Config> Pallet<T> {
         };
 
         let application_id = Self::get_next_application_id();
+        let current_block = PalletSubspace::<T>::get_current_block_number();
+
         let application = CuratorApplication {
             user_id: application_key,
             paying_for: key.clone(),
@@ -63,6 +66,7 @@ impl<T: Config> Pallet<T> {
             data: BoundedVec::truncate_from(data),
             status: ApplicationStatus::Pending,
             application_cost,
+            block_number: current_block,
         };
 
         PalletSubspace::<T>::remove_balance_from_account(&key, removed_balance_as_currency)?;
