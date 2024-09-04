@@ -322,6 +322,7 @@ pub mod pallet {
     #[pallet::storage] // --- ITEM ( subnet_burn )
     pub type SubnetBurn<T: Config> = StorageValue<_, u64, ValueQuery, DefaultSubnetBurn<T>>;
 
+    // TODO: make these a subnet params
     #[pallet::storage]
     pub type MaxEncryptionPeriod<T: Config> =
         StorageMap<_, Identity, u16, u64, ValueQuery, ConstU64<2_000>>;
@@ -337,6 +338,15 @@ pub mod pallet {
 
     #[pallet::storage]
     pub type UseWeightsEncrytyption<T: Config> = StorageMap<_, Identity, u16, bool, ValueQuery>;
+
+    #[pallet::type_value]
+    pub fn DefaultAlphaValues<T: Config>() -> (u16, u16) {
+        (45875, 58982)
+    }
+
+    #[pallet::storage]
+    pub type AlphaValues<T: Config> =
+        StorageMap<_, Identity, u16, (u16, u16), ValueQuery, DefaultAlphaValues<T>>;
 
     // ---------------------------------
     // Subnet PARAMS

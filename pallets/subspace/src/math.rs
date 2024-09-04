@@ -168,15 +168,6 @@ pub fn compute_alpha_values(consensus: &[I32F32], a: I32F32, b: I32F32) -> Vec<I
     alpha
 }
 
-pub fn get_alpha_values_32(_netuid: u16) -> (I32F32, I32F32) {
-    const ALPHA_LOW: u16 = 45875;
-    const ALPHA_HIGH: u16 = 58982;
-
-    let result =
-        [ALPHA_LOW, ALPHA_HIGH].map(|alpha| I32F32::from_num(alpha) / I32F32::from_num(u16::MAX));
-    (result[0], result[1])
-}
-
 trait Lerp {
     fn lerp(self, other: Self, t: Self) -> Self;
 }

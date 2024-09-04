@@ -400,9 +400,8 @@ impl<T: Config> YumaEpoch<T> {
         if consensus_high <= consensus_low && consensus_high == 0 && consensus_low >= 0 {
             return mat_ema_sparse(bonds_delta, bonds, default_alpha);
         }
-
         log::trace!("Using Liquid Alpha");
-        let (alpha_low, alpha_high) = get_alpha_values_32(self.subnet_id);
+        let (alpha_low, alpha_high) = self.params.alpha_values;
         log::trace!("alpha_low: {:?} alpha_high: {:?}", alpha_low, alpha_high);
 
         let (a, b) =

@@ -4,9 +4,9 @@ use sp_std::collections::btree_map::BTreeMap;
 
 use frame_support::DebugNoBound;
 use pallet_subspace::{
-    math::*, BalanceOf, Bonds, BondsMovingAverage, Config, Founder, Kappa, Keys, LastUpdate,
-    MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace, UseWeightsEncrytyption,
-    ValidatorPermits, Vec, Weights,
+    math::*, AlphaValues, BalanceOf, Bonds, BondsMovingAverage, Config, Founder, Kappa, Keys,
+    LastUpdate, MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace,
+    UseWeightsEncrytyption, ValidatorPermits, Vec, Weights,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
@@ -35,6 +35,7 @@ pub struct YumaParams<T: Config> {
     pub use_weights_encryption: bool,
     pub max_allowed_validators: Option<u16>,
     pub bonds_moving_average: u64,
+    pub alpha_values: (I32F32, I32F32),
 }
 
 #[derive(Clone, Encode, Decode, TypeInfo, Debug)]
@@ -117,6 +118,7 @@ impl<T: Config> YumaParams<T> {
         let last_update = LastUpdate::<T>::get(subnet_id);
         let block_at_registration = PalletSubspace::<T>::get_block_at_registration(subnet_id);
         let validator_permits = ValidatorPermits::<T>::get(subnet_id);
+        let alpha_values = Self::get_alpha_values_32(subnet_id);
 
         let modules = uids
             .into_iter()
@@ -179,6 +181,7 @@ impl<T: Config> YumaParams<T> {
             activity_cutoff: MaxWeightAge::<T>::get(subnet_id),
             max_allowed_validators: MaxAllowedValidators::<T>::get(subnet_id),
             bonds_moving_average: BondsMovingAverage::<T>::get(subnet_id),
+            alpha_values,
         })
     }
 
@@ -210,6 +213,14 @@ impl<T: Config> YumaParams<T> {
         // BTreeMap provides natural order, so iterating and collecting
         // will result in a vector with the same order as the uid map.
         uids.keys().map(|uid| weights.remove(uid).unwrap_or_default()).collect()
+    }
+
+    pub fn get_alpha_values_32(netuid: u16) -> (I32F32, I32F32) {
+        let (alpha_low, alpha_high) = AlphaValues::<T>::get(netuid);
+
+        let result = [alpha_low, alpha_high]
+            .map(|alpha| I32F32::from_num(alpha) / I32F32::from_num(u16::MAX));
+        (result[0], result[1])
     }
 }
 

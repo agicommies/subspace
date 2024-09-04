@@ -1031,8 +1031,8 @@ fn test_tempo_compound() {
         // we will now step the blocks
         step_block(SLOW_TEMPO + 24);
 
-        let fast = dbg!(SubspaceMod::get_delegated_stake(&f_key));
-        let slow = dbg!(SubspaceMod::get_delegated_stake(&s_key));
+        let fast = SubspaceMod::get_delegated_stake(&f_key);
+        let slow = SubspaceMod::get_delegated_stake(&s_key);
 
         // faster tempo should have quicker compound rate
         assert!(fast > slow);

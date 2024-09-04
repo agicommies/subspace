@@ -494,8 +494,6 @@ pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>
         .map(|(uid, _)| pallet_offworker::get_delegated_stake_on_uid::<Test>(netuid, uid as u16))
         .sum();
 
-    dbg!(subnet_stake);
-
     let measured_stake_amt = MeasuredStakeAmount::<Test>::get();
     let copier_stake = measured_stake_amt.mul_floor(subnet_stake);
     register_module(netuid, key, copier_stake, false).unwrap();

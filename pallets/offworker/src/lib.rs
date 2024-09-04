@@ -10,7 +10,7 @@ use frame_system::{
 };
 use pallet_subnet_emission::subnet_consensus::yuma::YumaOutput;
 use pallet_subspace::{
-    Active, MaxEncryptionPeriod, MinUnderperformanceThreshold, Pallet as SubspaceModule,
+    MaxEncryptionPeriod, MinUnderperformanceThreshold, Pallet as SubspaceModule,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::prelude::marker::PhantomData;
@@ -19,6 +19,7 @@ use sp_runtime::{
     offchain::storage::{StorageRetrievalError, StorageValueRef},
     Percent, RuntimeDebug,
 };
+use substrate_fixed::FixedI128;
 
 /// Defines application identifier for crypto keys of this module.
 ///
@@ -361,29 +362,31 @@ pub fn calculate_avg_delegate_divs<T: pallet_subspace::Config>(
     dividends: &[u16],
     copier_uid: u16,
     delegation_fee: Percent,
-) -> impl Into<I64F64> {
+) -> Option<I64F64> {
     let copier_idx = copier_uid as usize;
-    let fee_factor = I64F64::from_num(100 - delegation_fee.deconstruct()) / I64F64::from_num(100);
+    let fee_factor =
+        I64F64::from_num(100 - delegation_fee.deconstruct()).checked_div(I64F64::from_num(100))?;
 
     let (total_stake, total_dividends) = dividends
         .iter()
         .enumerate()
         .filter(|&(i, &div)| i != copier_idx && div != 0)
-        .fold(
+        .try_fold(
             (I64F64::from_num(0), I64F64::from_num(0)),
             |(stake_acc, div_acc), (i, &div)| {
-                (
-                    stake_acc + I64F64::from_num(get_delegated_stake_on_uid::<T>(netuid, i as u16)),
-                    div_acc + I64F64::from_num(div),
-                )
+                let stake = I64F64::from_num(get_delegated_stake_on_uid::<T>(netuid, i as u16));
+                let dividend = I64F64::from_num(div);
+                Some((
+                    stake_acc.checked_add(stake)?,
+                    div_acc.checked_add(dividend)?,
+                ))
             },
-        );
+        )?;
 
-    dbg!(total_stake);
-    let average_dividends = total_dividends / total_stake;
+    let average_dividends = total_dividends.checked_div(total_stake)?;
     let copier_stake = I64F64::from_num(get_delegated_stake_on_uid::<T>(netuid, copier_uid));
 
-    average_dividends * fee_factor * copier_stake
+    average_dividends.checked_mul(fee_factor)?.checked_mul(copier_stake)
 }
 
 // TODO:
@@ -446,14 +449,14 @@ impl<T: pallet_subspace::Config> ConsensusSimulationResult<T> {
             copier_uid,
             delegation_fee,
         )
-        .into();
+        .unwrap_or_else(|| FixedI128::from(0));
         let copier_divs = I64F64::from_num(yuma_output.dividends[copier_uid as usize]);
 
-        self.cumulative_copier_divs += copier_divs;
-        self.cumulative_avg_delegate_divs += avg_delegate_divs;
-        self.black_box_age += tempo;
-        // TODO:
-        // make configurable as subnet params
+        self.cumulative_copier_divs = self.cumulative_copier_divs.saturating_add(copier_divs);
+        self.cumulative_avg_delegate_divs =
+            self.cumulative_avg_delegate_divs.saturating_add(avg_delegate_divs);
+        self.black_box_age = self.black_box_age.saturating_add(tempo);
+
         self.max_encryption_period = MaxEncryptionPeriod::<T>::get(netuid);
         self.min_underperf_threshold = MinUnderperformanceThreshold::<T>::get(netuid);
     }
