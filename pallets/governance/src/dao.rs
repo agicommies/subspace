@@ -139,7 +139,6 @@ impl<T: Config> Pallet<T> {
     pub fn do_add_to_whitelist(
         origin: T::RuntimeOrigin,
         module_key: T::AccountId,
-        recommended_weight: u8,
     ) -> DispatchResult {
         let key = ensure_signed(origin)?;
         ensure!(Curator::<T>::get() == key, Error::<T>::NotCurator);
@@ -158,12 +157,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::AlreadyWhitelisted
         );
 
-        ensure!(
-            (1..=100).contains(&recommended_weight),
-            Error::<T>::InvalidRecommendedWeight
-        );
-
-        LegitWhitelist::<T>::insert(&module_key, recommended_weight);
+        LegitWhitelist::<T>::insert(&module_key, ());
 
         T::execute_application(&module_key)?;
 

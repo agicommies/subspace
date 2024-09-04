@@ -1,5 +1,8 @@
 use crate::*;
-use frame_support::traits::{ConstU32, Get, StorageVersion};
+use frame_support::{
+    pallet_prelude::ValueQuery,
+    traits::{ConstU32, Get, StorageVersion},
+};
 
 pub mod v2 {
     use dao::CuratorApplication;
@@ -11,6 +14,7 @@ pub mod v2 {
         use super::*;
         use dao::ApplicationStatus;
         use frame_support::{pallet_prelude::TypeInfo, storage_alias, Identity};
+        use pallet_subspace::AccountIdOf;
         use parity_scale_codec::{Decode, Encode};
         use sp_runtime::BoundedVec;
 
@@ -27,6 +31,10 @@ pub mod v2 {
         #[storage_alias]
         pub type CuratorApplications<T: Config> =
             StorageMap<Pallet<T>, Identity, u64, CuratorApplication<T>>;
+
+        #[storage_alias]
+        pub type LegitWhitelist<T: Config> =
+            StorageMap<Pallet<T>, Identity, AccountIdOf<T>, u8, ValueQuery>;
     }
 
     pub struct MigrateToV2<T>(sp_std::marker::PhantomData<T>);
@@ -35,7 +43,7 @@ pub mod v2 {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
             let on_chain_version = StorageVersion::get::<Pallet<T>>();
             if on_chain_version != 1 {
-                log::info!("Storage v12 already updated");
+                log::info!("Storage v2 already updated");
                 return Weight::zero();
             }
 
@@ -55,9 +63,16 @@ pub mod v2 {
                 },
             );
 
+            let old_whitelist: Vec<_> = old_storage::LegitWhitelist::<T>::iter().collect();
+            _ = old_storage::LegitWhitelist::<T>::clear(u32::MAX, None);
+
+            for (account, _) in old_whitelist {
+                LegitWhitelist::<T>::insert(account, ());
+            }
+
             log::info!("Migrated to v2");
 
-            T::DbWeight::get().reads_writes(1, 1)
+            T::DbWeight::get().reads_writes(2, 2)
         }
     }
 }
