@@ -1,5 +1,5 @@
 use crate::{EmissionError, Pallet};
-use core::marker::PhantomData;
+use core::{cmp::Ordering, marker::PhantomData};
 use frame_support::{ensure, DebugNoBound};
 use pallet_subspace::{
     math::*, Active, Bonds, BondsMovingAverage, BoostedBeta, Config, Consensus, Dividends,
@@ -487,22 +487,32 @@ impl<T: Config> YumaEpoch<T> {
         for (i, row) in weights.iter().enumerate() {
             let mut new_row = Vec::with_capacity(row.len());
             for &(j, weight) in row {
-                let stake = active_stake[i];
-                let cons = consensus[j as usize];
-                dbg!(&cons);
+                let Some(stake) = active_stake.get(i) else {
+                    continue;
+                };
+                let stake = *stake;
+
+                let Some(cons) = consensus.get(j as usize) else {
+                    continue;
+                };
+                let cons = *cons;
+
                 let mut new_weight = weight;
-                if weight > cons {
-                    dbg!("a");
-                    new_weight = cons;
-                    let penalty = (weight - cons) * (I32F32::from_num(1) + boosted_beta);
-                    new_weight -= penalty;
-                } else if weight < cons {
-                    dbg!("b");
-                    let penalty = (cons - weight) * boosted_beta;
-                    new_weight -= penalty;
+                match weight.cmp(&cons) {
+                    Ordering::Greater => {
+                        new_weight = cons;
+                        let penalty = (weight.saturating_sub(cons))
+                            .saturating_mul(I32F32::from_num(1).saturating_add(boosted_beta));
+                        new_weight = new_weight.saturating_sub(penalty);
+                    }
+                    Ordering::Less => {
+                        let penalty = (cons.saturating_sub(weight)).saturating_mul(boosted_beta);
+                        new_weight = new_weight.saturating_sub(penalty);
+                    }
+                    _ => {}
                 }
 
-                new_row.push((j, new_weight * stake));
+                new_row.push((j, new_weight.saturating_mul(stake)));
             }
             bonds_delta.push(new_row);
         }
