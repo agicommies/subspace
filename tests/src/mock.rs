@@ -484,8 +484,6 @@ pub fn get_total_subnet_balance(netuid: u16) -> u64 {
 
 /// Appends weight copier validator
 pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
-    // Here, we should get stake from people who have validator permits, ONLY !
-
     // Sums up all validators stake
     let subnet_stake = Active::<Test>::get(netuid)
         .iter()
