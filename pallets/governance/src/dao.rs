@@ -44,6 +44,12 @@ impl<T: Config> Pallet<T> {
             Error::<T>::AlreadyWhitelisted
         );
 
+        // Check if the application_key is already used in any existing application
+        ensure!(
+            !CuratorApplications::<T>::iter().any(|(_, app)| app.user_id == application_key),
+            Error::<T>::ApplicationKeyAlreadyUsed
+        );
+
         let application_cost = GeneralSubnetApplicationCost::<T>::get();
         ensure!(
             PalletSubspace::<T>::has_enough_balance(&key, application_cost),

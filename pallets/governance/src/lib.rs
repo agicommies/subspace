@@ -440,6 +440,8 @@ pub mod pallet {
         InvalidApplicationSize,
         /// The application is not in a pending state.
         ApplicationNotPending,
+        /// The application key is already used in another application.
+        ApplicationKeyAlreadyUsed,
         /// The application data is invalid or malformed.
         InvalidApplication,
         /// The account doesn't have enough balance to submit an application.
