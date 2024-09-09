@@ -7,13 +7,14 @@ use pallet_subnet_emission::{
 };
 use pallet_subnet_emission_api::SubnetConsensus;
 use pallet_subspace::{
-    BondsMovingAverage, LastUpdate, MaxAllowedUids, MaxAllowedWeights, MaxEncryptionPeriod,
-    MaxRegistrationsPerBlock, MaxWeightAge, RegistrationBlock, Tempo, UseWeightsEncrytyption,
-    ValidatorPermits, Weights, N,
+    BondsMovingAverage, Consensus, CopierMargin, LastUpdate, MaxAllowedUids, MaxAllowedWeights,
+    MaxEncryptionPeriod, MaxRegistrationsPerBlock, MaxWeightAge, RegistrationBlock, Tempo,
+    UseWeightsEncrytyption, ValidatorPermits, Weights, N,
 };
 use serde_json::Value;
 use sp_runtime::Percent;
 use std::{fs::File, io::Read, path::PathBuf};
+use substrate_fixed::types::I64F64;
 
 // TODO:
 // ## BUILDUP
@@ -54,32 +55,64 @@ fn test_backtest_simulation() {
         // Overwrite last update and registration blocks
         make_parameter_consensus_overwrites(TEST_NETUID, first_block, &json, None);
 
-        // copier will set perfectly in consensus weight
-        let copier_uid = setup_copier(
-            TEST_NETUID,
-            &json,
-            first_block,
-            JSON_NETUID,
-            UNIVERSAL_PENDING_EMISSION,
-        );
+        // Create CSV writer
+        let mut wtr =
+            csv::Writer::from_path("simulation_results.csv").expect("Failed to create CSV writer");
+        wtr.write_record(&[
+            "Copier Margin",
+            "Block Number",
+            "Consensus",
+            "All Dividends",
+            "Copier Dividend",
+            "Cumulative Copier Dividends",
+            "Cumulative Average Delegate Dividends",
+        ])
+        .expect("Failed to write CSV header");
 
-        let (simulation_result, iteraction_counter) = run_simulation(
-            TEST_NETUID,
-            copier_uid,
-            &json,
-            first_block,
-            JSON_NETUID,
-            TEMPO,
-            DELEGATION_FEE,
-            MAX_EPOCHS,
-            UNIVERSAL_PENDING_EMISSION,
-        );
+        // Loop through different copier margin values
+        for p in (0..=90).step_by(5) {
+            let copier_margin = I64F64::from_num(p as f64 / 1000.0);
+            CopierMargin::<Test>::insert(TEST_NETUID, copier_margin);
 
-        assert!(
-            pallet_offworker::is_copying_irrational(simulation_result.clone())
-                || iteraction_counter >= MAX_EPOCHS,
-            "Copying should have become irrational or max iterations should have been reached"
-        );
+            // copier will set perfectly in consensus weight
+            let copier_uid = setup_copier(
+                TEST_NETUID,
+                &json,
+                first_block,
+                JSON_NETUID,
+                UNIVERSAL_PENDING_EMISSION,
+            );
+
+            let (simulation_result, iteration_counter) = run_simulation(
+                TEST_NETUID,
+                copier_uid,
+                &json,
+                first_block,
+                JSON_NETUID,
+                TEMPO,
+                DELEGATION_FEE,
+                MAX_EPOCHS,
+                UNIVERSAL_PENDING_EMISSION,
+                &mut wtr,
+                copier_margin,
+            );
+
+            assert!(
+                pallet_offworker::is_copying_irrational(simulation_result.clone())
+                    || iteration_counter >= MAX_EPOCHS,
+                "Copying should have become irrational or max iterations should have been reached"
+            );
+
+            // Reset the state for the next iteration
+            System::reset_events();
+            let _ = LastUpdate::<Test>::clear(u32::MAX, None);
+            let _ = Weights::<Test>::clear(u32::MAX, None);
+            let _ = ValidatorPermits::<Test>::clear(u32::MAX, None);
+            let _ = RegistrationBlock::<Test>::clear(u32::MAX, None);
+            let _ = Consensus::<Test>::clear(u32::MAX, None);
+        }
+
+        wtr.flush().expect("Failed to flush CSV writer");
     });
 }
 
@@ -143,13 +176,13 @@ fn run_simulation(
     delegation_fee: Percent,
     max_epochs: usize,
     universal_pending_emission: u64,
+    wtr: &mut csv::Writer<std::fs::File>,
+    copier_margin: I64F64,
 ) -> (ConsensusSimulationResult<Test>, usize) {
     let mut simulation_result = ConsensusSimulationResult::default();
     let mut iter_counter = 0;
 
     let copier_last_update = SubspaceMod::get_last_update_for_uid(netuid, copier_uid);
-
-    let mut csv_data = Vec::new();
 
     for (block_number, block_weights) in json["weights"].as_object().unwrap() {
         let block_number: u64 = block_number.parse().unwrap();
@@ -173,17 +206,24 @@ fn run_simulation(
         last_output.clone().apply();
         simulation_result.update(last_output.clone(), tempo, copier_uid, delegation_fee);
 
-        csv_data.push((
-            block_number,
-            last_output.consensus,
-            last_output.dividends.clone(),
-            last_output.dividends[copier_uid as usize],
-            simulation_result.cumulative_copier_divs,
-            simulation_result.cumulative_avg_delegate_divs,
-        ));
+        // Write data to CSV
+        if let Err(e) = wtr.write_record(&[
+            copier_margin.to_string(),
+            block_number.to_string(),
+            format!("{:?}", last_output.consensus),
+            format!("{:?}", last_output.dividends),
+            last_output.dividends[copier_uid as usize].to_string(),
+            simulation_result.cumulative_copier_divs.to_string(),
+            simulation_result.cumulative_avg_delegate_divs.to_string(),
+        ]) {
+            eprintln!("Error writing CSV row: {}", e);
+        }
 
         if pallet_offworker::is_copying_irrational(simulation_result.clone()) {
-            println!("Copying became irrational at block {}", block_number);
+            println!(
+                "Copying became irrational at block {} with copier margin {}",
+                block_number, copier_margin
+            );
             break;
         }
 
@@ -192,54 +232,17 @@ fn run_simulation(
 
         if iter_counter >= max_epochs {
             println!(
-                "Max iterations ({}) reached without copying becoming irrational",
-                max_epochs
+                "Max iterations ({}) reached without copying becoming irrational with copier margin {}",
+                max_epochs,
+                copier_margin
             );
             break;
         }
     }
 
-    let mut wtr = match csv::Writer::from_path("simulation_results.csv") {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("Error creating CSV writer: {}", e);
-            return (simulation_result, iter_counter);
-        }
-    };
-
-    if let Err(e) = wtr.write_record(&[
-        "Block Number",
-        "Consensus",
-        "All Dividends",
-        "Copier Dividend",
-        "Cumulative Copier Dividends",
-        "Cumulative Average Delegate Dividends",
-    ]) {
-        eprintln!("Error writing CSV header: {}", e);
-        return (simulation_result, iter_counter);
-    }
-
-    // Write the data
-    for row in csv_data {
-        if let Err(e) = wtr.write_record(&[
-            row.0.to_string(),
-            format!("{:?}", row.1),
-            format!("{:?}", row.2),
-            row.3.to_string(),
-            row.4.to_string(),
-            row.5.to_string(),
-        ]) {
-            eprintln!("Error writing CSV row: {}", e);
-            return (simulation_result, iter_counter);
-        }
-    }
-
-    if let Err(e) = wtr.flush() {
-        eprintln!("Error flushing CSV writer: {}", e);
-    }
-
     (simulation_result, iter_counter)
 }
+
 fn load_json_data() -> Value {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("../snapshots/sn19_weights_stake.json");

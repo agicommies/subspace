@@ -328,15 +328,15 @@ pub mod pallet {
         StorageMap<_, Identity, u16, u64, ValueQuery, ConstU64<2_000>>;
 
     #[pallet::type_value]
-    pub fn DefaultMinUnderperformanceThreshold() -> Percent {
-        Percent::from_percent(0)
+    pub fn DefaultMinUnderperformanceThreshold() -> I64F64 {
+        I64F64::from_num(0)
     }
 
     /// Allowed percentage profit margin of rationality,
     /// above full irrationality for the weight copying strategy.
     #[pallet::storage]
-    pub type CopyingAllowedProfitMargin<T: Config> =
-        StorageMap<_, Identity, u16, Percent, ValueQuery, DefaultMinUnderperformanceThreshold>;
+    pub type CopierMargin<T: Config> =
+        StorageMap<_, Identity, u16, I64F64, ValueQuery, DefaultMinUnderperformanceThreshold>;
 
     #[pallet::storage]
     pub type UseWeightsEncrytyption<T: Config> = StorageMap<_, Identity, u16, bool, ValueQuery>;

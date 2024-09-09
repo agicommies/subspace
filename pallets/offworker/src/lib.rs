@@ -9,7 +9,7 @@ use frame_system::{
     pallet_prelude::BlockNumberFor,
 };
 use pallet_subnet_emission::subnet_consensus::yuma::YumaOutput;
-use pallet_subspace::{CopyingAllowedProfitMargin, MaxEncryptionPeriod, Pallet as SubspaceModule};
+use pallet_subspace::{CopierMargin, MaxEncryptionPeriod, Pallet as SubspaceModule};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::prelude::marker::PhantomData;
 use sp_core::crypto::KeyTypeId;
@@ -335,7 +335,7 @@ pub fn is_copying_irrational<T: pallet_subspace::Config>(
     ConsensusSimulationResult {
         black_box_age,
         max_encryption_period,
-        copying_allowed_profit_margin,
+        copier_margin: copying_allowed_profit_margin,
         cumulative_avg_delegate_divs,
         cumulative_copier_divs,
         ..
@@ -345,8 +345,8 @@ pub fn is_copying_irrational<T: pallet_subspace::Config>(
         return true;
     }
 
-    let threshold = I64F64::checked_from_num(copying_allowed_profit_margin.deconstruct())
-        .and_then(|p| p.checked_div(I64F64::from_num(100)))
+    let threshold = copying_allowed_profit_margin
+        .checked_div(I64F64::from_num(100))
         .map(|p| (I64F64::from_num(1) + p).saturating_mul(cumulative_avg_delegate_divs))
         .unwrap_or(cumulative_avg_delegate_divs);
 
@@ -422,7 +422,7 @@ pub fn get_delegated_stake_on_uid<T: pallet_subspace::Config>(netuid: u16, modul
 pub struct ConsensusSimulationResult<T: pallet_subspace::Config> {
     pub cumulative_copier_divs: I64F64,
     pub cumulative_avg_delegate_divs: I64F64,
-    pub copying_allowed_profit_margin: Percent,
+    pub copier_margin: I64F64,
     pub black_box_age: u64,
     pub max_encryption_period: u64,
     pub _phantom: PhantomData<T>,
@@ -433,7 +433,7 @@ impl<T: pallet_subspace::Config> Default for ConsensusSimulationResult<T> {
         ConsensusSimulationResult {
             cumulative_copier_divs: I64F64::from_num(0),
             cumulative_avg_delegate_divs: I64F64::from_num(0),
-            copying_allowed_profit_margin: Percent::from_percent(0),
+            copier_margin: I64F64::from_num(0),
             black_box_age: 0,
             max_encryption_period: 0,
             _phantom: PhantomData,
@@ -464,6 +464,6 @@ impl<T: pallet_subspace::Config> ConsensusSimulationResult<T> {
         self.black_box_age = self.black_box_age.saturating_add(tempo);
 
         self.max_encryption_period = MaxEncryptionPeriod::<T>::get(netuid);
-        self.copying_allowed_profit_margin = CopyingAllowedProfitMargin::<T>::get(netuid);
+        self.copier_margin = CopierMargin::<T>::get(netuid);
     }
 }
