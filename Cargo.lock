@@ -9232,7 +9232,6 @@ name = "subspace-rpc"
 version = "1.0.0"
 dependencies = [
  "jsonrpsee",
- "lazy_static",
  "pallet-subspace",
  "parity-scale-codec",
  "serde",

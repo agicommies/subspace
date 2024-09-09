@@ -18,7 +18,7 @@ def query_map_values(
     module: str,
     storage_function: str,
     params: list[Any] = [],
-    block_hash: str | None = None
+    block_hash: str | None = None,
 ) -> dict[str, Any]:
     result = client.query_map(  # type: ignore
         module=module, storage_function=storage_function, params=params, block_hash=block_hash  # type: ignore
@@ -34,7 +34,7 @@ def get_stake(client: SubstrateInterface, block_hash: str) -> dict[str, int]:
         module=STANDARD_MODULE,
         storage_function="Uids",
         params=[SUBNET],
-        block_hash=block_hash
+        block_hash=block_hash,
     )
 
     print(f"there are {len(all_uids)} uids")
@@ -48,7 +48,7 @@ def get_stake(client: SubstrateInterface, block_hash: str) -> dict[str, int]:
                 module=STANDARD_MODULE,
                 storage_function="Stake",
                 params=[hotkey],
-                block_hash=block_hash
+                block_hash=block_hash,
             )
             total_stake: int = sum(int(v) for v in stake_result.values())
             stake[str(uid)] = total_stake
@@ -75,7 +75,9 @@ def get_last_update(client: SubstrateInterface, block_hash: str) -> dict[str, st
     return sane_last_update
 
 
-def get_validator_permits(client: SubstrateInterface, block_hash: str) -> dict[str, bool]:
+def get_validator_permits(
+    client: SubstrateInterface, block_hash: str
+) -> dict[str, bool]:
     validator_permits = query_map_values(
         client, STANDARD_MODULE, "ValidatorPermit", [], block_hash
     )[str(SUBNET)]
@@ -108,7 +110,12 @@ def get_registration_blocks(
 
 def get_epoch_data(
     client: SubstrateInterface, block_hash: str, later_block_hash: str
-) -> tuple[dict[str, dict[str, list[tuple[int, int]]]], dict[str, str], dict[str, str], dict[str, bool]]:
+) -> tuple[
+    dict[str, dict[str, list[tuple[int, int]]]],
+    dict[str, str],
+    dict[str, str],
+    dict[str, bool],
+]:
 
     weights: dict[str, dict[str, list[tuple[int, int]]]] = {}
 
@@ -131,12 +138,34 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a snapshot of weights and stake."
     )
-    parser.add_argument(
-        "-o", "--output", default="weights_stake.json", help="Output file name"
-    )
+    parser.add_argument("-s", "--subnet", type=int,
+                        required=True, help="Subnet number")
+    parser.add_argument("-o", "--output", help="Output file name")
     parser.add_argument("-d", "--directory", default=".",
                         help="Output directory")
+    parser.add_argument("--tempo", type=int,
+                        default=DEFAULT_TEMPO, help="Tempo value")
+    parser.add_argument(
+        "--start-block",
+        type=int,
+        default=DEFAULT_START_BLOCK,
+        help="Start block number",
+    )
+    parser.add_argument(
+        "--iter-epochs",
+        type=int,
+        default=DEFAULT_ITER_EPOCHS,
+        help="Number of iteration epochs",
+    )
     args: argparse.Namespace = parser.parse_args()
+
+    SUBNET = args.subnet
+    TEMPO = args.tempo
+    START_BLOCK = args.start_block
+    ITER_EPOCHS = args.iter_epochs
+
+    if args.output is None:
+        args.output = f"sn{SUBNET}_weights_stake.json"
 
     output_path: str = os.path.join(args.directory, args.output)
 
@@ -146,11 +175,9 @@ def main() -> None:
 
     data: dict[str, Any] = {}
 
-    # Get initial stake from START_BLOCK
-    print("hash")
+    print("Getting initial stake...")
     start_block_hash = client.get_block_hash(START_BLOCK)
     data["stake"] = get_stake(client, start_block_hash)
-    print("stake")
 
     data["weights"] = {}
     data["last_update"] = {}
@@ -161,14 +188,13 @@ def main() -> None:
         block_hash = client.get_block_hash(block_number)
         later_block_hash = client.get_block_hash(block_number + 1)
         weights, last_update, registration_blocks, validator_permits = get_epoch_data(
-            client, block_hash, later_block_hash)
+            client, block_hash, later_block_hash
+        )
         data["weights"][str(block_number)] = weights
         data["last_update"][str(block_number)] = last_update
         data["registration_blocks"][str(block_number)] = registration_blocks
         data["validator_permits"][str(block_number)] = validator_permits
-        print(
-            f"Collected weights, last update, registration blocks, and validator permits for block {block_number}"
-        )
+        print(f"Collected data for block {block_number}")
 
     print(f"Writing snapshot to {output_path}")
     os.makedirs(args.directory, exist_ok=True)

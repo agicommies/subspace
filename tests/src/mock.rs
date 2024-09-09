@@ -17,8 +17,8 @@ use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
     subnet::{self, SubnetChangeset},
     Active, Address, BurnConfig, DefaultKey, DefaultSubnetParams, Dividends, Emission, Incentive,
-    LastUpdate, MaxRegistrationsPerBlock, Name, SubnetBurn, SubnetBurnConfig, SubnetParams, Tempo,
-    TotalStake, N,
+    LastUpdate, MaxRegistrationsPerBlock, Name, StakeFrom, StakeTo, SubnetBurn, SubnetBurnConfig,
+    SubnetParams, Tempo, TotalStake, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{prelude::collections::BTreeSet, TypeInfo};
@@ -28,7 +28,7 @@ use sp_runtime::{
     traits::{AccountIdConversion, BlakeTwo256, IdentifyAccount, IdentityLookup},
     BuildStorage, DispatchError, DispatchResult, KeyTypeId,
 };
-use std::cell::RefCell;
+use std::{cell::RefCell, iter::Copied};
 
 frame_support::construct_runtime!(
     pub enum Test {
@@ -448,6 +448,21 @@ pub fn increase_stake(key: AccountId, stake: u64) {
     SubspaceMod::increase_stake(&key, &key, stake);
 }
 
+// Sets all key's stake to 0 and increases delegated stake to desired amount
+pub fn make_keys_all_stake_be(account: AccountId, stake: u64) {
+    let _ = StakeFrom::<Test>::clear_prefix(&account, u32::MAX, None);
+    let _ = StakeTo::<Test>::clear_prefix(&account, u32::MAX, None);
+
+    let keys_total_stake =
+        SubspaceMod::get_delegated_stake(&account) + SubspaceMod::get_owned_stake(&account);
+
+    TotalStake::<Test>::mutate(|total_stake| {
+        *total_stake = total_stake.saturating_sub(keys_total_stake).saturating_add(stake);
+    });
+
+    increase_stake(account, stake);
+}
+
 pub fn set_total_issuance(total_issuance: u64) {
     let key = DefaultKey::<Test>::get();
     // Reset the issuance (completelly nuke the key's balance)
@@ -482,8 +497,7 @@ pub fn get_total_subnet_balance(netuid: u16) -> u64 {
     keys.iter().map(SubspaceMod::get_balance_u64).sum()
 }
 
-/// Appends weight copier validator
-pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
+pub fn get_copier_stake(netuid: u16) -> u64 {
     // Sums up all validators stake
     let subnet_stake = Active::<Test>::get(netuid)
         .iter()
@@ -494,7 +508,14 @@ pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>
 
     let measured_stake_amt = MeasuredStakeAmount::<Test>::get();
     let copier_stake = measured_stake_amt.mul_floor(subnet_stake);
-    register_module(netuid, key, copier_stake, false).unwrap();
+    copier_stake
+}
+
+/// Appends weight copier validator
+pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
+    let copier_stake = get_copier_stake(netuid);
+    // registers module if not already registered
+    let _ = register_module(netuid, key, copier_stake, false);
     step_block(1);
     set_weights(netuid, key, uids, values);
 }
