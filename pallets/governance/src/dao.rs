@@ -36,19 +36,17 @@ impl<T: Config> Pallet<T> {
 
     #[must_use]
     fn can_add_application_status_based(key: &T::AccountId) -> bool {
-        // check if theres an application with the given key
-        if let Some((_, app)) =
-            CuratorApplications::<T>::iter().find(|(_, app)| app.user_id == *key)
-        {
-            // if the application exists check its status
-            match app.status {
-                ApplicationStatus::Pending | ApplicationStatus::Accepted => false,
-                _ => true,
-            }
-        } else {
-            // if no application exists with this key, return true
-            true
-        }
+        // check if there's an application with the given key
+        CuratorApplications::<T>::iter().find(|(_, app)| app.user_id == *key).map_or(
+            true,
+            |(_, app)| {
+                // if the application exists, check its status
+                !matches!(
+                    app.status,
+                    ApplicationStatus::Pending | ApplicationStatus::Accepted
+                )
+            },
+        )
     }
 
     pub fn add_application(
