@@ -1,5 +1,11 @@
 use crate::mock::*;
 use csv;
+use frame_support::{
+    storage::{self, storage_prefix, unhashed},
+    traits::{PalletInfoAccess, StorageInstance},
+};
+use frame_system::pallet_prelude::OriginFor;
+
 use pallet_offworker::ConsensusSimulationResult;
 use pallet_subnet_emission::{
     subnet_consensus::yuma::{YumaEpoch, YumaParams},
@@ -13,9 +19,10 @@ use pallet_subspace::{
 };
 use serde_json::Value;
 use sp_runtime::Percent;
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{fmt::format, fs::File, io::Read, path::PathBuf};
 use substrate_fixed::types::I64F64;
 
+const JSON_NETUID: &str = "1";
 // todo: look at the passing of copier stake
 // dbg copier and avg delta
 #[test]
@@ -23,27 +30,15 @@ fn test_backtest_simulation_with_copier_margins() {
     new_test_ext().execute_with(|| {
         // TEST SETTINGS
         const TEST_NETUID: u16 = 0;
-        const TEMPO: u64 = 360;
-        const UNIVERSAL_PENDING_EMISSION: u64 = to_nano(100);
-        const DELEGATION_FEE: Percent = Percent::from_percent(9);
+        const TEMPO: u64 = 100;
+        const UNIVERSAL_PENDING_EMISSION: u64 = to_nano(1000);
+        const DELEGATION_FEE: Percent = Percent::from_percent(0);
         // BACKTEST SETTINGS
         const MAX_EPOCHS: usize = 50;
-        const JSON_NETUID: &str = "12"; // ! dont forget to change
-
-        // REGISTER AND SETUP SUBNET
-        setup_subnet(TEST_NETUID, TEMPO);
-
-        let json = load_json_data();
-        let first_block =
-            json["weights"].as_object().unwrap().keys().next().unwrap().parse().unwrap();
-
-        // REGISTER MODULES, AND OVERWRITE THEM TO MAINNET STATE
-        // Register at genesis
-        register_modules_from_json(&json, TEST_NETUID);
+        let file_name = format!("simulation_results_{}.csv", JSON_NETUID,);
 
         // Create a CSV writer
-        let mut wtr =
-            csv::Writer::from_path("simulation_results.csv").expect("Failed to create CSV writer");
+        let mut wtr = csv::Writer::from_path(file_name).expect("Failed to create CSV writer");
 
         // Write CSV header
         wtr.write_record(&[
@@ -57,11 +52,25 @@ fn test_backtest_simulation_with_copier_margins() {
         ])
         .expect("Failed to write CSV header");
 
+        let json = load_json_data();
+        let first_block =
+            json["weights"].as_object().unwrap().keys().next().unwrap().parse().unwrap();
         // Loop through different copier margin values
-        for margin in 0..=90 {
-            if margin != 0 {
-                clear_out_data();
-            }
+        for margin in 0..=0 {
+            let pallet_name = <SubspaceMod as PalletInfoAccess>::name().as_bytes();
+
+            let pallet_prefix = sp_io::hashing::twox_128(pallet_name);
+            let _ = storage::unhashed::clear_prefix(&pallet_prefix, None, None);
+            dbg!(N::<Test>::get(TEST_NETUID));
+
+            // REGISTER AND SETUP SUBNET
+            setup_subnet(TEST_NETUID, TEMPO);
+
+            // REGISTER MODULES, AND OVERWRITE THEM TO MAINNET STATE
+            // Register at genesis
+            register_modules_from_json(&json, TEST_NETUID);
+
+            let copier_uid: u16 = N::<Test>::get(TEST_NETUID);
 
             dbg!(&margin);
             // Set block number the simulation will start from
@@ -69,7 +78,7 @@ fn test_backtest_simulation_with_copier_margins() {
             // Overwrite last update and registration blocks
             make_parameter_consensus_overwrites(TEST_NETUID, first_block, &json, None);
 
-            let copier_margin = I64F64::from_num(margin as f64 / 1000.0);
+            let copier_margin = I64F64::from_num(margin as f64 / 100.0);
             CopierMargin::<Test>::set(TEST_NETUID, copier_margin);
 
             // copier will set perfectly in consensus weight
@@ -79,6 +88,7 @@ fn test_backtest_simulation_with_copier_margins() {
                 first_block,
                 JSON_NETUID,
                 UNIVERSAL_PENDING_EMISSION,
+                copier_uid,
             );
 
             let (simulation_result, iteration_counter) = run_simulation(
@@ -106,12 +116,12 @@ fn test_backtest_simulation_with_copier_margins() {
     });
 }
 
-fn clear_out_data() {
-    System::reset_events();
+fn _clear_out_data() {
+    // System::reset_events();
     let _ = Weights::<Test>::clear(u32::MAX, None);
-    let _ = ValidatorPermits::<Test>::clear(u32::MAX, None);
+    // let _ = ValidatorPermits::<Test>::clear(u32::MAX, None);
     let _ = LastUpdate::<Test>::clear(u32::MAX, None);
-    let _ = RegistrationBlock::<Test>::clear(u32::MAX, None);
+    // let _ = RegistrationBlock::<Test>::clear(u32::MAX, None);
 }
 
 fn setup_subnet(netuid: u16, tempo: u64) {
@@ -123,7 +133,7 @@ fn setup_subnet(netuid: u16, tempo: u64) {
     UseWeightsEncrytyption::<Test>::set(netuid, true);
 
     // Things that should never expire / exceed
-    MaxWeightAge::<Test>::set(netuid, 28_000);
+    MaxWeightAge::<Test>::set(netuid, 300_000);
     MaxEncryptionPeriod::<Test>::set(netuid, u64::MAX);
     MaxRegistrationsPerBlock::<Test>::set(u16::MAX);
     MaxAllowedUids::<Test>::set(netuid, u16::MAX);
@@ -137,9 +147,8 @@ fn setup_copier(
     first_block: u64,
     json_netuid: &str,
     universal_pending_emission: u64,
+    copier_uid: u16,
 ) -> u16 {
-    let copier_uid: u16 = N::<Test>::get(netuid);
-
     let v_permits = get_validator_permits(first_block, json);
 
     insert_weights_for_block(
@@ -222,6 +231,7 @@ fn run_simulation(
             let black_box_age = simulation_result.black_box_age / tempo;
             let gini = calculate_gini(&current_window_data);
 
+            dbg!(block_number, copier_margin, dc, dd, gini, encryption_window, black_box_age);
             // Write to CSV
             wtr.write_record(&[
                 format!("{:?}", copier_margin),
@@ -293,7 +303,8 @@ fn calculate_gini(values: &[f64]) -> f64 {
 }
 fn load_json_data() -> Value {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("/root/subnet_snapshots/sn12_weights_stake.json");
+    let file_name = format!("/root/subnet_snapshots/sn{}_weights_stake.json", JSON_NETUID);
+    path.push(file_name);
     let mut file = File::open(path).expect("Failed to open weights_stake.json");
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect("Failed to read file");

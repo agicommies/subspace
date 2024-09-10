@@ -143,7 +143,7 @@ pub mod pallet {
                 // let foo = ConsensusSimulationResult {
                 //     cumulative_copier_divs: I64F64::from_num(0.8),
                 //     cumulative_avg_delegate_divs: I64F64::from_num(1.0),
-                //     copying_allowed_profit_margin: I64F64::from_num(0.1),
+                //     copying_margin: I64F64::from_num(0.1),
                 //     black_box_age: 100,
                 //     max_encryption_period: 1000,
                 //     _phantom: PhantomData,
@@ -329,27 +329,30 @@ impl<T: Config> Pallet<T> {
 /// # Note
 ///
 /// The function compares `cumulative_copier_divs` against an adjusted
-/// `cumulative_avg_delegate_divs`, taking into account the `copying_allowed_profit_margin`.
+/// `cumulative_avg_delegate_divs`, taking into account the `copying_margin`.
 #[must_use]
 pub fn is_copying_irrational<T: pallet_subspace::Config>(
     ConsensusSimulationResult {
         black_box_age,
         max_encryption_period,
-        copier_margin: copying_allowed_profit_margin,
+        copier_margin,
         cumulative_avg_delegate_divs,
         cumulative_copier_divs,
         ..
     }: ConsensusSimulationResult<T>,
 ) -> bool {
+    dbg!(
+        black_box_age,
+        max_encryption_period,
+        copier_margin,
+        cumulative_avg_delegate_divs,
+        cumulative_copier_divs
+    );
     if black_box_age >= max_encryption_period {
         return true;
     }
-
-    let threshold = copying_allowed_profit_margin
-        .checked_div(I64F64::from_num(100))
-        .map(|p| (I64F64::from_num(1) + p).saturating_mul(cumulative_avg_delegate_divs))
-        .unwrap_or(cumulative_avg_delegate_divs);
-
+    let threshold =
+        (I64F64::from_num(1) + copier_margin).saturating_mul(cumulative_avg_delegate_divs);
     cumulative_copier_divs < threshold
 }
 /// # Arguments
@@ -413,7 +416,7 @@ pub fn get_delegated_stake_on_uid<T: pallet_subspace::Config>(netuid: u16, modul
 ///
 /// * `cumulative_copier_divs` - Cumulative dividends for the copier.
 /// * `cumulative_avg_delegate_divs` - Cumulative average dividends for delegates.
-/// * `copying_allowed_profit_margin` - Minimum underperformance threshold.
+/// * `copying_margin` - Minimum underperformance threshold.
 /// * `epoch_block_sum` - Sum of blocks in the epoch.
 /// * `max_encryption_period` - Maximum encryption period.
 /// * `_phantom` - PhantomData for the generic type `T`.
