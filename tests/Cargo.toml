@@ -18,6 +18,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 bty = { workspace = true }
 csv = "1.1"
 
+testthing = { path = "../testthing" }
+
 frame-support = { workspace = true, features = ["std"] }
 frame-system = { workspace = true, features = ["std"] }
 log = { workspace = true }

@@ -32,6 +32,7 @@ match_bool = "deny"
 infinite_loop = "deny"
 
 [workspace.dependencies]
+rsa = "0.9.4"
 # External dependencies
 bty = { version = "0.2.0", default-features = false }
 clap = "4.4.6"
