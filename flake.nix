@@ -6,10 +6,9 @@
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     naersk.url = "github:nix-community/naersk";
-    mach-nix.url = "github:DavHau/mach-nix/3.5.0";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, naersk, mach-nix, ... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, naersk, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -18,7 +17,7 @@
         };
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-        generalBuildInputs = with pkgs; [ pkg-config rocksdb zstd.dev bashInteractive ];
+        generalBuildInputs = with pkgs; [ pkg-config rocksdb zstd.dev bashInteractive openssl.dev ];
         buildInputs = with pkgs;
           if pkgs.stdenv.isLinux
           then generalBuildInputs ++ [ jemalloc ]
@@ -29,28 +28,19 @@
           cargo = rust;
           rustc = rust;
         };
-
-        pythonEnv = mach-nix.lib.${system}.mkPython {
-          requirements = ''
-            substrate-interface
-            setuptools
-          '';
-        };
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = buildInputs ++ [ pythonEnv ];
+          buildInputs = buildInputs;
           nativeBuildInputs = nativeBuildInputs;
 
           env = {
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
             ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
             ZSTD_SYS_USE_PKG_CONFIG = "true";
+            OPENSSL_DIR = "${pkgs.openssl.dev}";
+            OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
           } // nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux { JEMALLOC_OVERRIDE = "${pkgs.jemalloc}/lib/libjemalloc.so"; };
-
-          shellHook = ''
-            export PATH=${pythonEnv}/bin:$PATH
-          '';
         };
 
         packages.default = naersk'.buildPackage {
