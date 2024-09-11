@@ -9539,6 +9539,7 @@ dependencies = [
  "pallet-subspace",
  "parity-scale-codec",
  "rand",
+ "rsa",
  "scale-info",
  "serde_json",
  "sp-arithmetic",
