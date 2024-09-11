@@ -1096,6 +1096,15 @@ pub mod pallet {
         ) -> DispatchResult {
             Self::do_remove_blacklist(origin, netuid, module)
         }
+
+        #[pallet::weight(0)] // TODO: add benchmark
+        pub fn set_weights_encrypted(
+            origin: OriginFor<T>,
+            netuid: u16,
+            encrypted_weights: Vec<u16>,
+        ) -> DispatchResult {
+            Self::do_set_weights_encrypted(origin, netuid, encrypted_weights)
+        }
     }
 }
 
