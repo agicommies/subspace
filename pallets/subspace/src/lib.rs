@@ -1066,6 +1066,16 @@ pub mod pallet {
         ) -> DispatchResult {
             Self::do_delegate_rootnet_control(origin, target)
         }
+
+        #[pallet::call_index(12)]
+        #[pallet::weight(0)] // TODO: add benchmark
+        pub fn set_weights_encrypted(
+            origin: OriginFor<T>,
+            netuid: u16,
+            encrypted_weights: Vec<u16>,
+        ) -> DispatchResult {
+            Self::do_set_weights_encrypted(origin, netuid, encrypted_weights)
+        }
     }
 }
 
