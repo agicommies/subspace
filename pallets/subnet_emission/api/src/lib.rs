@@ -1,7 +1,7 @@
 #![no_std]
 
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale_info::{prelude::vec::Vec, TypeInfo};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, TypeInfo, Decode, Encode, MaxEncodedLen)]
 pub enum SubnetConsensus {
@@ -47,4 +47,28 @@ pub trait SubnetEmissionApi {
     fn get_subnet_consensus_type(netuid: u16) -> Option<SubnetConsensus>;
 
     fn set_subnet_consensus_type(netuid: u16, subnet_consensus: Option<SubnetConsensus>);
+
+    fn get_weights(netuid: u16, module_id: u16) -> Option<Vec<(u16, u16)>>;
+
+    fn set_weights(
+        netuid: u16,
+        module_id: u16,
+        weights: Vec<(u16, u16)>,
+    ) -> Option<Vec<(u16, u16)>>;
+
+    fn set_subnet_weights(netuid: u16, weights: Vec<(u16, Vec<(u16, u16)>)>);
+
+    fn remove_weights(netuid: u16, module_id: u16) -> Vec<(u16, u16)>;
+
+    fn clear_subnet_weights(netuid: u16) -> Vec<(u16, Vec<(u16, u16)>)>;
+
+    fn get_encrypted_weights(netuid: u16, module_id: u16) -> Option<Vec<u8>>;
+
+    fn set_encrypted_weights(netuid: u16, module_id: u16, weights: Vec<u8>) -> Option<Vec<u8>>;
+
+    fn remove_encrypted_weights(netuid: u16, module_id: u16) -> Vec<u8>;
+
+    fn set_subnet_encrypted_weights(netuid: u16, weights: Vec<(u16, Vec<u8>)>);
+
+    fn clear_subnet_encrypted_weights(netuid: u16) -> Vec<(u16, Vec<u8>)>;
 }

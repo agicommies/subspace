@@ -2,11 +2,13 @@ use core::fmt::Debug;
 
 use sp_std::collections::btree_map::BTreeMap;
 
+use crate::Config;
+
 use frame_support::DebugNoBound;
 use pallet_subspace::{
-    math::*, AlphaValues, BalanceOf, Bonds, BondsMovingAverage, Config, Founder, Kappa, Keys,
-    LastUpdate, MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace,
-    UseWeightsEncrytyption, ValidatorPermits, Vec, Weights,
+    math::*, AlphaValues, BalanceOf, Bonds, BondsMovingAverage, Founder, Kappa, Keys, LastUpdate,
+    MaxAllowedValidators, MaxWeightAge, Pallet as PalletSubspace, UseWeightsEncrytyption,
+    ValidatorPermits, Vec,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
@@ -214,7 +216,7 @@ impl<T: Config> YumaParams<T> {
     }
 
     fn compute_weights(subnet_id: u16, uids: &BTreeMap<u16, T::AccountId>) -> Vec<Vec<(u16, u16)>> {
-        let mut weights: BTreeMap<_, _> = Weights::<T>::iter_prefix(subnet_id).collect();
+        let mut weights: BTreeMap<_, _> = crate::Weights::<T>::iter_prefix(subnet_id).collect();
         // BTreeMap provides natural order, so iterating and collecting
         // will result in a vector with the same order as the uid map.
         uids.keys().map(|uid| weights.remove(uid).unwrap_or_default()).collect()

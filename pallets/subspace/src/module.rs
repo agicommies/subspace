@@ -266,8 +266,11 @@ impl<T: Config> Pallet<T> {
         ValidatorTrust::<T>::insert(netuid, validator_trust);
 
         // SWAP WEIGHTS
-        Weights::<T>::insert(netuid, uid, Weights::<T>::get(netuid, replace_uid)); // Make uid - key association.
-        Weights::<T>::remove(netuid, replace_uid); // Make uid - key association.
+        let weights = T::remove_weights(netuid, replace_uid);
+        T::set_weights(netuid, uid, weights);
+
+        let weights = T::remove_encrypted_weights(netuid, replace_uid);
+        T::set_encrypted_weights(netuid, uid, weights);
 
         // HANDLE THE REGISTRATION BLOCK
         RegistrationBlock::<T>::insert(
@@ -300,6 +303,8 @@ impl<T: Config> Pallet<T> {
             DelegationFee::<T>::get(netuid, &replace_key),
         ); // Make uid - key association.
         DelegationFee::<T>::remove(netuid, &replace_key); // Make uid - key association.
+
+        Self::deposit_event(Event::ModuleSwapped(netuid, uid, replace_uid));
 
         // remove stake from old key and add to new key
         Self::remove_stake_from_storage(&module_key);

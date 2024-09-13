@@ -246,7 +246,7 @@ struct Decrypter {
 impl Default for Decrypter {
     fn default() -> Self {
         Self {
-            key: rsa::RsaPrivateKey::new(&mut OsRng, 587).unwrap(),
+            key: rsa::RsaPrivateKey::new(&mut OsRng, 512).unwrap(),
         }
     }
 }

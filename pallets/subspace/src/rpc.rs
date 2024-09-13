@@ -9,7 +9,6 @@ pub struct ModuleStats<T: Config> {
     pub emission: u64,
     pub incentive: u16,
     pub dividends: u16,
-    pub weights: Vec<(u16, u16)>,
 }
 
 impl<T: Config> Pallet<T> {
@@ -21,10 +20,6 @@ impl<T: Config> Pallet<T> {
         let dividends = Self::get_dividends_for_uid(netuid, uid);
         let last_update = Self::get_last_update_for_uid(netuid, uid);
 
-        let weights: Vec<(u16, u16)> = Weights::<T>::get(netuid, uid)
-            .iter()
-            .filter_map(|(i, w)| if *w > 0 { Some((*i, *w)) } else { None })
-            .collect();
         let stake_from: BTreeMap<T::AccountId, u64> = Self::get_stake_from_vector(key);
 
         let registration_block = RegistrationBlock::<T>::get(netuid, uid);
@@ -36,7 +31,6 @@ impl<T: Config> Pallet<T> {
             dividends,
             last_update,
             registration_block,
-            weights,
         }
     }
 }

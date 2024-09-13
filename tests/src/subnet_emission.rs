@@ -659,7 +659,7 @@ fn test_1_graph() {
 
         run_to_block(1); // run to next block to ensure weights are set on nodes after their registration block
 
-        assert_ok!(SubspaceMod::set_weights(
+        assert_ok!(SubnetEmissionMod::set_weights(
             RuntimeOrigin::signed(1),
             netuid,
             vec![uid],
@@ -740,7 +740,7 @@ fn test_10_graph() {
         run_to_block(1); // run to next block to ensure weights are set on nodes after their registration block
 
         for i in 0..n {
-            assert_ok!(SubspaceMod::set_weights(
+            assert_ok!(SubnetEmissionMod::set_weights(
                 get_origin(n + 1),
                 netuid,
                 vec![i as u16],
@@ -848,7 +848,7 @@ fn yuma_weights_older_than_max_age_are_discarded() {
         let weight = [1].to_vec();
 
         // set the weights
-        assert_ok!(SubspaceMod::do_set_weights(
+        assert_ok!(SubnetEmissionMod::do_set_weights(
             get_origin(yuma_validator_key),
             yuma_netuid,
             uid,

@@ -1,15 +1,28 @@
 #![allow(non_snake_case)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::marker::PhantomData;
+
+use frame_system::pallet_prelude::*;
+
+use frame_support::{
+    dispatch::{self, DispatchInfo, PostDispatchInfo},
+    pallet_prelude::*,
+    traits::{Currency, IsSubType},
+};
 pub use pallet::*;
-use sp_std::collections::btree_map::BTreeMap;
+use pallet_subspace::{CallType, SubspaceSignedExtension};
+use scale_info::TypeInfo;
+use sp_runtime::traits::{DispatchInfoOf, Dispatchable, PostDispatchInfoOf, SignedExtension};
+use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 // ! Pallet that handles the emisson distribution amongs subnets
 
 // Pallet Imports
 // ==============
-
+pub mod authority;
 pub mod distribute_emission;
 pub mod migrations;
+pub mod set_weights;
 pub mod subnet_pricing {
     pub mod demo;
     pub mod root;
@@ -98,6 +111,13 @@ pub mod pallet {
     pub type YumaParameters<T: Config> =
         StorageDoubleMap<_, Identity, u16, Identity, u64, YumaParams<T>, OptionQuery>;
 
+    #[pallet::storage]
+    pub type Weights<T> = StorageDoubleMap<_, Identity, u16, Identity, u16, Vec<(u16, u16)>>;
+
+    #[pallet::storage]
+    pub type EncryptedWeights<T: Config> =
+        StorageDoubleMap<_, Identity, u16, Identity, u16, Vec<u8>>;
+
     type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -125,6 +145,18 @@ pub mod pallet {
             if let Err(err) = res {
                 log::error!("Error in on_initialize emission: {err:?}, skipping...");
             }
+
+            Self::copy_delegated_weights(block_number);
+
+            for netuid in pallet_subspace::N::<T>::iter_keys() {
+                if pallet_subspace::Pallet::<T>::blocks_until_next_epoch(netuid, block_number) > 0 {
+                    continue;
+                }
+
+                // Clear weights for normal subnets
+                Self::clear_set_weight_rate_limiter(netuid);
+            }
+
             Weight::zero()
         }
     }
@@ -159,11 +191,11 @@ pub mod pallet {
             <T as Config>::Currency::total_issuance().saturated_into()
         }
 
-    fn get_total_issuence_as_u64() -> u64
-    where
-        <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance:
-            TryInto<u64>,
-    {
+        fn get_total_issuence_as_u64() -> u64
+        where
+            <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance:
+                TryInto<u64>,
+        {
             let total_free_balance = Self::get_total_free_balance();
             let total_staked_balance = TotalStake::<T>::get();
             total_free_balance
@@ -265,5 +297,160 @@ pub mod pallet {
                 }
             }
         }
+
+        // --- Returns the transaction priority for setting weights.
+        pub fn get_priority_set_weights(key: &T::AccountId, netuid: u16) -> u64 {
+            if let Some(uid) = pallet_subspace::Uids::<T>::get(netuid, key) {
+                let last_update =
+                    pallet_subspace::Pallet::<T>::get_last_update_for_uid(netuid, uid);
+                pallet_subspace::Pallet::<T>::get_current_block_number().saturating_add(last_update)
+            } else {
+                0
+            }
+        }
+    }
+
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
+        #[pallet::call_index(0)]
+        #[pallet::weight((0, DispatchClass::Normal, Pays::No))]
+        pub fn set_weights(
+            origin: OriginFor<T>,
+            netuid: u16,
+            uids: Vec<u16>,
+            weights: Vec<u16>,
+        ) -> DispatchResult {
+            Self::do_set_weights(origin, netuid, uids, weights)
+        }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(0)] // TODO: add benchmark
+        pub fn set_weights_encrypted(
+            origin: OriginFor<T>,
+            netuid: u16,
+            encrypted_weights: Vec<u16>,
+        ) -> DispatchResult {
+            Self::do_set_weights_encrypted(origin, netuid, encrypted_weights)
+        }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight((0, DispatchClass::Normal, Pays::No))]
+        pub fn delegate_rootnet_control(
+            origin: OriginFor<T>,
+            target: T::AccountId,
+        ) -> DispatchResult {
+            Self::do_delegate_rootnet_control(origin, target)
+        }
+    }
+}
+
+#[derive(Encode, Decode, Clone, Eq, PartialEq, TypeInfo)]
+pub struct SubnetEmissionSignedExtension<T: Config + Send + Sync + TypeInfo>(pub PhantomData<T>);
+
+impl<T: Config + Send + Sync + TypeInfo> SubnetEmissionSignedExtension<T>
+where
+    T::RuntimeCall: Dispatchable<Info = DispatchInfo, PostInfo = PostDispatchInfo>,
+    <T as frame_system::Config>::RuntimeCall: IsSubType<Call<T>>,
+{
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+
+    pub fn get_priority_set_weights(who: &T::AccountId, netuid: u16) -> u64 {
+        // Return the non vanilla priority for a set weights call.
+        Pallet::<T>::get_priority_set_weights(who, netuid)
+    }
+
+    pub fn get_priority_vanilla(who: &T::AccountId) -> u64 {
+        // Return high priority so that every extrinsic except set_weights function will
+        // have a higher priority than the set_weights call
+        // get the current block number
+        let current_block_number = pallet_subspace::Pallet::<T>::get_current_block_number();
+        let balance = pallet_subspace::Pallet::<T>::get_balance_u64(who);
+
+        // this is the current block number minus the last update block number
+        current_block_number.saturating_add(balance)
+    }
+
+    #[must_use]
+    pub fn u64_to_balance(
+        input: u64,
+    ) -> Option<
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance,
+    > {
+        input.try_into().ok()
+    }
+}
+
+impl<T: Config + Send + Sync + TypeInfo> sp_std::fmt::Debug for SubnetEmissionSignedExtension<T> {
+    fn fmt(&self, f: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
+        write!(f, "SubspaceSignedExtension")
+    }
+}
+
+impl<T: Config + Send + Sync + TypeInfo> SignedExtension for SubnetEmissionSignedExtension<T>
+where
+    T::RuntimeCall: Dispatchable<Info = DispatchInfo, PostInfo = PostDispatchInfo>,
+    <T as frame_system::Config>::RuntimeCall: IsSubType<Call<T>>,
+{
+    const IDENTIFIER: &'static str = "SubspaceSignedExtension";
+
+    type AccountId = T::AccountId;
+    type Call = T::RuntimeCall;
+    type AdditionalSigned = ();
+    type Pre = (CallType, u64, Self::AccountId);
+
+    fn additional_signed(&self) -> Result<Self::AdditionalSigned, TransactionValidityError> {
+        Ok(())
+    }
+
+    fn validate(
+        &self,
+        who: &Self::AccountId,
+        call: &Self::Call,
+        _info: &DispatchInfoOf<Self::Call>,
+        _len: usize,
+    ) -> TransactionValidity {
+        match call.is_sub_type() {
+            _ => Ok(ValidTransaction {
+                priority: Self::get_priority_vanilla(who),
+                ..Default::default()
+            }),
+        }
+    }
+
+    // NOTE: Add later when we put in a pre and post dispatch step.
+    fn pre_dispatch(
+        self,
+        who: &Self::AccountId,
+        call: &Self::Call,
+        _info: &DispatchInfoOf<Self::Call>,
+        _len: usize,
+    ) -> Result<Self::Pre, TransactionValidityError> {
+        let who = who.clone();
+        match call.is_sub_type() {
+            Some(Call::set_weights { .. }) => Ok((CallType::SetWeights, 0, who)),
+            _ => Ok((CallType::Other, 0, who)),
+        }
+    }
+
+    fn post_dispatch(
+        maybe_pre: Option<Self::Pre>,
+        _info: &DispatchInfoOf<Self::Call>,
+        _post_info: &PostDispatchInfoOf<Self::Call>,
+        _len: usize,
+        _result: &dispatch::DispatchResult,
+    ) -> Result<(), TransactionValidityError> {
+        if let Some((call_type, _transaction_fee, _who)) = maybe_pre {
+            match call_type {
+                CallType::SetWeights => {
+                    log::debug!("Not Implemented!");
+                }
+                _ => {
+                    log::debug!("Not Implemented!");
+                }
+            }
+        }
+        Ok(())
     }
 }

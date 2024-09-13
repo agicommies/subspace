@@ -23,7 +23,6 @@ pub struct ModuleStats {
     pub emission: u64,
     pub incentive: u16,
     pub dividends: u16,
-    pub weights: Vec<(u16, u16)>, // Vec of (uid, weight)
 }
 
 #[derive(Decode, Encode, PartialEq, Eq, Clone, Debug, TypeInfo, Serialize, Deserialize)]

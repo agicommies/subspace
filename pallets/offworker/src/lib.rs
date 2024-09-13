@@ -16,7 +16,7 @@ use pallet_subnet_emission::subnet_consensus::yuma::{
 use pallet_subspace::{
     math::{inplace_normalize_64, vec_fixed64_to_fixed32},
     Active, Consensus, CopierMargin, FloorDelegationFee, MaxEncryptionPeriod,
-    Pallet as SubspaceModule, Tempo, Weights, N,
+    Pallet as SubspaceModule, Tempo, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use scale_info::prelude::marker::PhantomData;
@@ -341,7 +341,7 @@ impl<T: Config> Pallet<T> {
 
         // Query the onchain weights for subnet_id
         let onchain_weights: Vec<(u16, Vec<(u16, u16)>)> =
-            Weights::<T>::iter_prefix(subnet_id).collect();
+            pallet_subnet_emission::Weights::<T>::iter_prefix(subnet_id).collect();
 
         // Create a map of uid to decrypted weights for easier lookup
         let decrypted_weights_map: BTreeMap<u16, Vec<(u16, u16)>> =
@@ -601,7 +601,7 @@ impl<T: pallet_subspace::Config> Default for ConsensusSimulationResult<T> {
         }
     }
 }
-impl<T: pallet_subspace::Config> ConsensusSimulationResult<T> {
+impl<T: pallet_subnet_emission::Config + pallet_subspace::Config> ConsensusSimulationResult<T> {
     pub fn update(
         &mut self,
         yuma_output: YumaOutput<T>,

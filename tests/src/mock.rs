@@ -13,6 +13,7 @@ use frame_system::{
 use pallet_governance::GlobalGovernanceConfig;
 use pallet_governance_api::*;
 use pallet_offworker::{crypto::Signature, Call as OffworkerCall, MeasuredStakeAmount};
+use pallet_subnet_emission::{EncryptedWeights, Weights};
 use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
     subnet::SubnetChangeset, Active, Address, BurnConfig, DefaultKey, DefaultSubnetParams,
@@ -33,6 +34,7 @@ use std::{
     cell::RefCell,
     io::{Cursor, Read},
     iter::Copied,
+    u32,
 };
 
 frame_support::construct_runtime!(
@@ -221,6 +223,74 @@ impl SubnetEmissionApi for Test {
         subnet_consensus: Option<pallet_subnet_emission_api::SubnetConsensus>,
     ) {
         pallet_subnet_emission::SubnetConsensusType::<Test>::set(netuid, subnet_consensus)
+    }
+
+    fn get_weights(netuid: u16, module_id: u16) -> Option<Vec<(u16, u16)>> {
+        Weights::<Test>::get(netuid, module_id)
+    }
+
+    fn set_weights(
+        netuid: u16,
+        module_id: u16,
+        weights: Vec<(u16, u16)>,
+    ) -> Option<Vec<(u16, u16)>> {
+        let old = Weights::<Test>::get(netuid, module_id);
+        Weights::<Test>::set(netuid, module_id, Some(weights));
+
+        old
+    }
+
+    fn set_subnet_weights(netuid: u16, weights: Vec<(u16, Vec<(u16, u16)>)>) {
+        let _ = Weights::<Test>::clear(u32::MAX, None);
+        for (module_id, weights) in weights {
+            Weights::<Test>::set(netuid, module_id, Some(weights));
+        }
+    }
+
+    fn remove_weights(netuid: u16, module_id: u16) -> Vec<(u16, u16)> {
+        let old = Weights::<Test>::get(netuid, module_id);
+        Weights::<Test>::remove(netuid, module_id);
+
+        old.unwrap_or(Vec::new())
+    }
+
+    fn clear_subnet_weights(netuid: u16) -> Vec<(u16, Vec<(u16, u16)>)> {
+        let old = Weights::<Test>::iter_prefix(netuid).collect::<Vec<_>>();
+        let _ = Weights::<Test>::clear_prefix(netuid, u32::MAX, None);
+
+        old
+    }
+
+    fn get_encrypted_weights(netuid: u16, module_id: u16) -> Option<Vec<u8>> {
+        EncryptedWeights::<Test>::get(netuid, module_id)
+    }
+
+    fn set_encrypted_weights(netuid: u16, module_id: u16, weights: Vec<u8>) -> Option<Vec<u8>> {
+        let old = EncryptedWeights::<Test>::get(netuid, module_id);
+        EncryptedWeights::<Test>::set(netuid, module_id, Some(weights));
+
+        old
+    }
+
+    fn remove_encrypted_weights(netuid: u16, module_id: u16) -> Vec<u8> {
+        let old = EncryptedWeights::<Test>::get(netuid, module_id);
+        EncryptedWeights::<Test>::remove(netuid, module_id);
+
+        old.unwrap_or(Vec::new())
+    }
+
+    fn set_subnet_encrypted_weights(netuid: u16, weights: Vec<(u16, Vec<u8>)>) {
+        let _ = EncryptedWeights::<Test>::clear(u32::MAX, None);
+        for (module_id, weights) in weights {
+            EncryptedWeights::<Test>::set(netuid, module_id, Some(weights));
+        }
+    }
+
+    fn clear_subnet_encrypted_weights(netuid: u16) -> Vec<(u16, Vec<u8>)> {
+        let old = EncryptedWeights::<Test>::iter_prefix(netuid).collect::<Vec<_>>();
+        let _ = EncryptedWeights::<Test>::clear_prefix(netuid, u32::MAX, None);
+
+        old
     }
 }
 
@@ -546,7 +616,7 @@ pub(crate) fn step_epoch(netuid: u16) {
 
 #[allow(dead_code)]
 pub fn set_weights(netuid: u16, key: AccountId, uids: Vec<u16>, values: Vec<u16>) {
-    SubspaceMod::set_weights(get_origin(key), netuid, uids.clone(), values.clone()).unwrap();
+    SubnetEmissionMod::set_weights(get_origin(key), netuid, uids.clone(), values.clone()).unwrap();
 }
 
 #[allow(dead_code)]

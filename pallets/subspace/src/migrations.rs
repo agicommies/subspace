@@ -555,7 +555,6 @@ pub mod v12 {
         migrate_double_map!(Address);
         migrate_double_map!(Metadata);
         migrate_double_map!(RegistrationBlock);
-        migrate_double_map!(Weights);
         migrate_double_map!(DelegationFee);
 
         // SUBNET EMISSION MODULE
@@ -563,6 +562,12 @@ pub mod v12 {
         migrate_storage_alias!(old_storage::PendingEmission<T>);
         migrate_storage_alias!(old_storage::SubnetEmission<T>);
         migrate_api!(get_subnet_consensus_type, set_subnet_consensus_type);
+
+        let weights = T::clear_subnet_weights(curr);
+        T::set_subnet_weights(target, weights);
+
+        let weights = T::clear_subnet_weights(curr);
+        T::set_subnet_weights(target, weights);
 
         // GOVERNANCE MODULE
         let curr_governance_config = T::get_subnet_governance_configuration(curr);

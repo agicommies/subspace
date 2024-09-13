@@ -732,8 +732,7 @@ impl_runtime_apis! {
                     incentive: stats.incentive,
                     dividends: stats.dividends,
                     last_update: stats.last_update,
-                    registration_block: stats.registration_block,
-                    weights: stats.weights,
+                    registration_block: stats.registration_block
                 },
                 params: ModuleParams {
                     name: params.name,
@@ -890,6 +889,84 @@ impl pallet_subnet_emission_api::SubnetEmissionApi for Runtime {
         subnet_consensus: Option<pallet_subnet_emission_api::SubnetConsensus>,
     ) {
         pallet_subnet_emission::SubnetConsensusType::<Runtime>::set(netuid, subnet_consensus)
+    }
+
+    fn get_weights(netuid: u16, module_id: u16) -> Option<Vec<(u16, u16)>> {
+        pallet_subnet_emission::Weights::<Runtime>::get(netuid, module_id)
+    }
+
+    fn set_weights(
+        netuid: u16,
+        module_id: u16,
+        weights: Vec<(u16, u16)>,
+    ) -> Option<Vec<(u16, u16)>> {
+        let old = pallet_subnet_emission::Weights::<Runtime>::get(netuid, module_id);
+        pallet_subnet_emission::Weights::<Runtime>::set(netuid, module_id, Some(weights));
+
+        old
+    }
+
+    fn set_subnet_weights(netuid: u16, weights: Vec<(u16, Vec<(u16, u16)>)>) {
+        let _ = pallet_subnet_emission::Weights::<Runtime>::clear(u32::MAX, None);
+        for (module_id, weights) in weights {
+            pallet_subnet_emission::Weights::<Runtime>::set(netuid, module_id, Some(weights));
+        }
+    }
+
+    fn remove_weights(netuid: u16, module_id: u16) -> Vec<(u16, u16)> {
+        let old = pallet_subnet_emission::Weights::<Runtime>::get(netuid, module_id);
+        pallet_subnet_emission::Weights::<Runtime>::remove(netuid, module_id);
+
+        old.unwrap_or(Vec::new())
+    }
+
+    fn clear_subnet_weights(netuid: u16) -> Vec<(u16, Vec<(u16, u16)>)> {
+        let old =
+            pallet_subnet_emission::Weights::<Runtime>::iter_prefix(netuid).collect::<Vec<_>>();
+        let _ = pallet_subnet_emission::Weights::<Runtime>::clear_prefix(netuid, u32::MAX, None);
+
+        old
+    }
+
+    fn get_encrypted_weights(netuid: u16, module_id: u16) -> Option<Vec<u8>> {
+        pallet_subnet_emission::EncryptedWeights::<Runtime>::get(netuid, module_id)
+    }
+
+    fn set_encrypted_weights(netuid: u16, module_id: u16, weights: Vec<u8>) -> Option<Vec<u8>> {
+        let old = pallet_subnet_emission::EncryptedWeights::<Runtime>::get(netuid, module_id);
+        pallet_subnet_emission::EncryptedWeights::<Runtime>::set(netuid, module_id, Some(weights));
+
+        old
+    }
+
+    fn remove_encrypted_weights(netuid: u16, module_id: u16) -> Vec<u8> {
+        let old = pallet_subnet_emission::EncryptedWeights::<Runtime>::get(netuid, module_id);
+        pallet_subnet_emission::EncryptedWeights::<Runtime>::remove(netuid, module_id);
+
+        old.unwrap_or(Vec::new())
+    }
+
+    fn set_subnet_encrypted_weights(netuid: u16, weights: Vec<(u16, Vec<u8>)>) {
+        let _ = pallet_subnet_emission::EncryptedWeights::<Runtime>::clear(u32::MAX, None);
+        for (module_id, weights) in weights {
+            pallet_subnet_emission::EncryptedWeights::<Runtime>::set(
+                netuid,
+                module_id,
+                Some(weights),
+            );
+        }
+    }
+
+    fn clear_subnet_encrypted_weights(netuid: u16) -> Vec<(u16, Vec<u8>)> {
+        let old = pallet_subnet_emission::EncryptedWeights::<Runtime>::iter_prefix(netuid)
+            .collect::<Vec<_>>();
+        let _ = pallet_subnet_emission::EncryptedWeights::<Runtime>::clear_prefix(
+            netuid,
+            u32::MAX,
+            None,
+        );
+
+        old
     }
 }
 

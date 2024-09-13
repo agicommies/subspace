@@ -5,7 +5,7 @@ use pallet_subnet_emission_api::SubnetConsensus;
 // use frame_support::{pallet_prelude::Weight, weights::RuntimeDbWeight};
 use pallet_subspace::{
     math::*, Config, Dividends, Emission, Founder, GlobalParams, Incentive, IncentiveRatio,
-    LastUpdate, Pallet as PalletSubspace, SubnetParams, Trust, TrustRatio, Vec, Weights, N,
+    LastUpdate, Pallet as PalletSubspace, SubnetParams, Trust, TrustRatio, Vec, N,
 };
 // use sp_core::Get;
 use sp_std::vec;
@@ -531,7 +531,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
         let min_weight_stake_f64 = I64F64::from_num(global_params.min_weight_stake);
         let mut weights: Vec<Vec<(u16, u16)>> = vec![vec![]; n as usize];
 
-        for (uid_i, weights_i) in Weights::<T>::iter_prefix(netuid) {
+        for (uid_i, weights_i) in crate::Weights::<T>::iter_prefix(netuid) {
             let weight_age =
                 Self::get_current_weight_age(&last_update_vector, current_block, uid_i);
             let (weight_changed, valid_weights) = Self::check_weight_validity(
@@ -551,7 +551,7 @@ impl<T: Config + pallet::Config> LinearEpoch<T> {
             *weights = valid_weights;
 
             if weight_changed {
-                Weights::<T>::insert(netuid, uid_i, weights.clone());
+                crate::Weights::<T>::insert(netuid, uid_i, weights.clone());
             }
         }
 

@@ -1,7 +1,7 @@
-use crate::EmissionError;
+use crate::{Config, EmissionError};
 use core::marker::PhantomData;
 use frame_support::{ensure, DebugNoBound};
-use pallet_subspace::{math::*, BalanceOf, Config, Pallet as PalletSubspace};
+use pallet_subspace::{math::*, BalanceOf, Pallet as PalletSubspace};
 pub use params::{AccountKey, ModuleKey, YumaParams};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
