@@ -24,9 +24,9 @@ pub mod v14 {
     use super::*;
     use frame_support::traits::OnRuntimeUpgrade;
 
-    pub struct MigrateToV13<T>(sp_std::marker::PhantomData<T>);
+    pub struct MigrateToV14<T>(sp_std::marker::PhantomData<T>);
 
-    impl<T: Config> OnRuntimeUpgrade for MigrateToV13<T> {
+    impl<T: Config> OnRuntimeUpgrade for MigrateToV14<T> {
         fn on_runtime_upgrade() -> Weight {
             let on_chain_version = StorageVersion::get::<Pallet<T>>();
             if on_chain_version != 13 {
@@ -34,12 +34,6 @@ pub mod v14 {
                 return Weight::zero();
             }
             log::info!("Migrating storage to v14");
-
-            let netuid = 2;
-            let module_n = N::<T>::get(netuid);
-
-            log::info!("number of modules is {:?}", module_n);
-
             StorageVersion::new(14).put::<Pallet<T>>();
             Weight::zero()
         }
