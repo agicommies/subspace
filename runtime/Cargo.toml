@@ -59,6 +59,7 @@ frame-system-benchmarking = { workspace = true, optional = true }
 # EVM Support
 
 # Frontier
+fp-account = { workspace = true }
 fp-evm = { workspace = true, features = ["serde"] }
 fp-rpc = { workspace = true }
 fp-self-contained = { workspace = true, features = ["serde"] }
@@ -122,7 +123,7 @@ std = [
 	"subspace-runtime-api/std",
 	# EVM
 	# Frontier
-	# "fp-account/std",
+	"fp-account/std",
 	"fp-evm/std",
 	"fp-rpc/std",
 	"fp-self-contained/std",
