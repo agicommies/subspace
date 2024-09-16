@@ -29,7 +29,6 @@ frame-try-runtime = { workspace = true, optional = true }
 pallet-aura.workspace = true
 pallet-balances.workspace = true
 pallet-grandpa.workspace = true
-pallet-insecure-randomness-collective-flip.workspace = true
 pallet-multisig.workspace = true
 pallet-sudo.workspace = true
 pallet-timestamp.workspace = true
@@ -65,6 +64,7 @@ fp-rpc = { workspace = true }
 fp-self-contained = { workspace = true, features = ["serde"] }
 # Frontier FRAME
 pallet-base-fee = { workspace = true }
+pallet-dynamic-fee = { workspace = true }
 pallet-ethereum = { workspace = true }
 pallet-evm = { workspace = true }
 pallet-evm-chain-id = { workspace = true }
@@ -100,7 +100,6 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
-	"pallet-insecure-randomness-collective-flip/std",
 	"pallet-multisig/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
@@ -129,6 +128,7 @@ std = [
 	"fp-self-contained/std",
 	# Frontier FRAME
 	"pallet-base-fee/std",
+	"pallet-dynamic-fee/std",
 	"pallet-ethereum/std",
 	"pallet-evm/std",
 	"pallet-evm-chain-id/std",
@@ -158,7 +158,6 @@ try-runtime = [
 	"pallet-balances/try-runtime",
 	"pallet-base-fee/try-runtime",
 	"pallet-grandpa/try-runtime",
-	"pallet-insecure-randomness-collective-flip/try-runtime",
 	"pallet-multisig/try-runtime",
 	"pallet-governance/try-runtime",
 	"pallet-subnet-emission/try-runtime",

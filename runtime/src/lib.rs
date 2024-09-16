@@ -21,7 +21,6 @@ use frame_support::{
     genesis_builder_helper::{build_config, create_default_config},
     pallet_prelude::Get,
 };
-use frame_system::RawOrigin;
 
 // Consensus pallets
 use pallet_aura::MinimumPeriodTimesTwo;
@@ -38,10 +37,7 @@ use pallet_ethereum::{
     Call::transact, PostLogContent, Transaction as EthereumTransaction, TransactionAction,
     TransactionData,
 };
-use pallet_evm::{
-    Account as EVMAccount, AddressMapping, EnsureAddressOrigin, FeeCalculator,
-    HashedAddressMapping, Runner,
-};
+use pallet_evm::{Account as EVMAccount, FeeCalculator, HashedAddressMapping, Runner};
 
 // Subnet emission API
 use pallet_subnet_emission_api::SubnetConsensus;
@@ -288,8 +284,6 @@ impl frame_system::Config for Runtime {
     type PostTransactions = ();
 }
 
-impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
-
 impl pallet_aura::Config for Runtime {
     type AuthorityId = AuraId;
     type DisabledValidators = ();
@@ -481,37 +475,13 @@ parameter_types! {
     pub SuicideQuickClearLimit: u32 = 0;
 }
 
-pub struct EnsureAddressSameAsOrigin<Origin>(sp_std::marker::PhantomData<Origin>);
-
-impl<Origin> EnsureAddressOrigin<Origin> for EnsureAddressSameAsOrigin<Origin>
-where
-    Origin: Into<Result<RawOrigin<AccountId>, Origin>> + From<RawOrigin<AccountId>>,
-{
-    type Success = AccountId;
-
-    fn try_address_origin(address: &H160, o: Origin) -> Result<Self::Success, Origin> {
-        o.into().and_then(|o| match o {
-            RawOrigin::Signed(who) => {
-                let address_account =
-                    <Runtime as pallet_evm::Config>::AddressMapping::into_account_id(*address);
-                if who == address_account {
-                    Ok(who)
-                } else {
-                    Err(Origin::from(RawOrigin::Signed(who)))
-                }
-            }
-            r => Err(Origin::from(r)),
-        })
-    }
-}
-
 impl pallet_evm::Config for Runtime {
     type FeeCalculator = BaseFee;
     type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
     type WeightPerGas = WeightPerGas;
     type BlockHashMapping = pallet_ethereum::EthereumBlockHashMapping<Self>;
-    type CallOrigin = EnsureAddressSameAsOrigin<RuntimeOrigin>;
-    type WithdrawOrigin = EnsureAddressSameAsOrigin<RuntimeOrigin>;
+    type CallOrigin = pallet_evm::EnsureAddressTruncated;
+    type WithdrawOrigin = pallet_evm::EnsureAddressTruncated;
     type AddressMapping = HashedAddressMapping<BlakeTwo256>;
     type Currency = Balances;
     type RuntimeEvent = RuntimeEvent;
@@ -538,6 +508,14 @@ impl pallet_ethereum::Config for Runtime {
     type StateRoot = pallet_ethereum::IntermediateStateRoot<Self>;
     type PostLogContent = PostBlockAndTxnHashes;
     type ExtraDataLength = ConstU32<30>;
+}
+
+parameter_types! {
+    pub BoundDivision: U256 = U256::from(1024);
+}
+
+impl pallet_dynamic_fee::Config for Runtime {
+    type MinGasPriceBoundDivisor = BoundDivision;
 }
 
 parameter_types! {
@@ -568,7 +546,6 @@ construct_runtime!(
     pub enum Runtime
     {
         System: frame_system,
-        RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
         Timestamp: pallet_timestamp,
         Aura: pallet_aura,
         Grandpa: pallet_grandpa,
@@ -585,11 +562,11 @@ construct_runtime!(
         FaucetModule: pallet_faucet,
 
         // EVM Support
-        BaseFee: pallet_base_fee,
         EVM: pallet_evm,
         Ethereum: pallet_ethereum,
         EVMChainId: pallet_evm_chain_id,
-
+        BaseFee: pallet_base_fee,
+        DynamicFee: pallet_dynamic_fee,
     }
 );
 
