@@ -17,9 +17,11 @@ impl OffworkerExt {
 
 #[cfg(feature = "std")]
 pub trait OffworkerExtension: Send + 'static {
-    fn decrypt_weight(&self, encrypted: Vec<u8>) -> Option<(Vec<u16>, Vec<u16>)>;
+    fn decrypt_weight(&self, encrypted: Vec<u8>) -> Option<Vec<(u16, u16)>>;
 
-    fn get_encryption_key(&self) -> (Vec<u8>, Vec<u8>);
+    fn is_authority_node(&self) -> bool;
+
+    fn get_encryption_key(&self) -> Option<(Vec<u8>, Vec<u8>)>;
 }
 
 #[sp_runtime_interface::runtime_interface]
@@ -27,13 +29,19 @@ pub trait Offworker {
     fn decrypt_weight(
         &mut self,
         encrypted: sp_std::vec::Vec<u8>,
-    ) -> Option<(sp_std::vec::Vec<u16>, sp_std::vec::Vec<u16>)> {
+    ) -> Option<sp_std::vec::Vec<(u16, u16)>> {
         self.extension::<OffworkerExt>()
             .expect("missing offworker ext")
             .decrypt_weight(encrypted)
     }
 
-    fn get_encryption_key(&mut self) -> (sp_std::vec::Vec<u8>, sp_std::vec::Vec<u8>) {
+    fn is_authority_node(&mut self) -> bool {
+        self.extension::<OffworkerExt>()
+            .expect("missing offworker ext")
+            .is_authority_node()
+    }
+
+    fn get_encryption_key(&mut self) -> Option<(sp_std::vec::Vec<u8>, sp_std::vec::Vec<u8>)> {
         self.extension::<OffworkerExt>()
             .expect("missing offworker ext")
             .get_encryption_key()

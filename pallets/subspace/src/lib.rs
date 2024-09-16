@@ -739,6 +739,10 @@ pub mod pallet {
         AlreadyBlacklisted,
         /// Module is not on the subnet blacklist
         NotBlacklisted,
+        /// Subnet weight encryption is disabled
+        SubnetNotEncrypted,
+        /// Subnet weight encryption is enabled
+        SubnetEncrypted,
     }
 
     // ---------------------------------

@@ -7,15 +7,21 @@ use std::collections::BTreeMap;
 use alloc::vec::Vec;
 use frame_support::traits::Get;
 use frame_system::{
-    offchain::{AppCrypto, CreateSignedTransaction, SignedPayload, Signer, SigningTypes},
+    offchain::{
+        AppCrypto, CreateSignedTransaction, SendUnsignedTransaction, SignedPayload, Signer,
+        SigningTypes,
+    },
     pallet_prelude::BlockNumberFor,
 };
-use pallet_subnet_emission::subnet_consensus::{
-    util::{
-        consensus::ConsensusOutput,
-        params::{ConsensusParams, ModuleKey, ModuleParams},
+use pallet_subnet_emission::{
+    subnet_consensus::{
+        util::{
+            consensus::ConsensusOutput,
+            params::{ConsensusParams, ModuleKey, ModuleParams},
+        },
+        yuma::YumaEpoch,
     },
-    yuma::YumaEpoch,
+    EncryptedWeights,
 };
 
 use pallet_subnet_emission::Weights;
@@ -154,9 +160,28 @@ pub mod pallet {
         // ! This function is not actually guaranteed to run on every block
         fn offchain_worker(block_number: BlockNumberFor<T>) {
             log::info!("Offchain worker is running");
-            let decryption_keys = vec![0u16; 0]; // TODO
 
-            for subnet_id in [0u16; 0] {
+            if !testthing::offworker::is_authority_node() {
+                return;
+            }
+
+            let public_key: (Vec<u8>, Vec<u8>) = (vec![], vec![]);
+
+            let subnets = pallet_subnet_emission::SubnetAuthorityData::<T>::iter()
+                .filter_map(|(netuid, data)| {
+                    if !pallet_subspace::UseWeightsEncrytyption::<T>::get(netuid) {
+                        return None;
+                    }
+
+                    if data.authority_public_key != public_key {
+                        return None;
+                    }
+
+                    Some(netuid)
+                })
+                .collect::<Vec<_>>();
+
+            for subnet_id in subnets {
                 let current_block: u64 =
                     block_number.try_into().ok().expect("blockchain won't pass 2^64 blocks");
 
@@ -179,16 +204,23 @@ pub mod pallet {
                 for (param_block, params) in new_params {
                     // Try to decrypt the weight here
                     // TODO: Decrypt Encrypted Weight
-                    let decrypted_weights: Option<Vec<(u16, Vec<(u16, u16)>)>> = Some(Vec::new());
+                    let decrypted_weights = EncryptedWeights::<T>::iter_prefix(subnet_id)
+                        .map(|(validator, encrypted)| {
+                            match testthing::offworker::decrypt_weight(encrypted) {
+                                Some(decrypted) => Some((validator, decrypted)),
+                                None => None,
+                            }
+                        })
+                        .collect::<Option<Vec<_>>>();
 
                     if let Some(decrypted_weights) = decrypted_weights {
                         let should_decrypt: bool =
-                            Self::should_decrpyt(decrypted_weights, params, subnet_id);
+                            Self::should_decrpyt(&decrypted_weights, params, subnet_id);
 
                         if should_decrypt {
-                            // TODO: Send decrypted weights to the runtime
-                            // Also set the simulation struct to default, and set the offchain
-                            // worker simulation storage to default
+                            if let Err(err) = Self::send_weights(subnet_id, decrypted_weights) {
+                                log::error!("couldn't send weights to runtime: {err}");
+                            }
                         }
                     }
 
@@ -204,17 +236,34 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(2)]
         #[pallet::weight({0})]
-        pub fn submit_price_unsigned_with_signed_payload(
+        pub fn send_decrypted_weights(
             origin: OriginFor<T>,
-            _price_payload: WeightsPayload<T::Public, T::AccountId, BlockNumberFor<T>>,
+            price_payload: WeightsPayload<T::Public>,
             _signature: T::Signature,
         ) -> DispatchResultWithPostInfo {
-            // This ensures that the function can only be called via unsigned transaction.
             ensure_none(origin)?;
 
-            // now increment the block number at which we expect next unsigned transaction.
-            // let current_block = <system::Pallet<T>>::block_number();
-            // <NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
+            pallet_subnet_emission::Pallet::<T>::handle_decrypted_weights(
+                price_payload.subnet_id,
+                price_payload.decrypted_weights,
+            );
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(3)]
+        #[pallet::weight({0})]
+        pub fn send_keep_alive(
+            origin: OriginFor<T>,
+            keep_alive_payload: KeepAlivePayload<T::Public>,
+            _signature: T::Signature,
+        ) -> DispatchResultWithPostInfo {
+            ensure_none(origin)?;
+
+            pallet_subnet_emission::Pallet::<T>::handle_authority_node_keep_alive(
+                keep_alive_payload.public_key,
+            );
+
             Ok(().into())
         }
     }
@@ -254,22 +303,76 @@ pub mod pallet {
     #[pallet::storage]
     pub type MeasuredStakeAmount<T: Config> =
         StorageValue<_, Percent, ValueQuery, DefaultMeasuredStakeAmount<T>>;
+
+    const UNSIGNED_TXS_PRIORITY: u64 = 0; // TODO
+
+    #[pallet::validate_unsigned]
+    impl<T: Config> ValidateUnsigned for Pallet<T> {
+        type Call = Call<T>;
+
+        fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+            let valid_tx = |provide| {
+                ValidTransaction::with_tag_prefix("ocw-demo")
+                    .priority(UNSIGNED_TXS_PRIORITY)
+                    .and_provides([&provide])
+                    .longevity(3)
+                    .propagate(true)
+                    .build()
+            };
+
+            match call {
+                Call::send_decrypted_weights {
+                    ref price_payload,
+                    ref signature,
+                } => {
+                    if !SignedPayload::<T>::verify::<T::AuthorityId>(
+                        price_payload,
+                        signature.clone(),
+                    ) {
+                        return InvalidTransaction::BadProof.into();
+                    }
+                    valid_tx(b"send_decrypted_weights".to_vec())
+                }
+                Call::send_keep_alive {
+                    ref keep_alive_payload,
+                    ref signature,
+                } => {
+                    if !SignedPayload::<T>::verify::<T::AuthorityId>(
+                        keep_alive_payload,
+                        signature.clone(),
+                    ) {
+                        return InvalidTransaction::BadProof.into();
+                    }
+                    valid_tx(b"send_decrypted_weights".to_vec())
+                }
+                _ => InvalidTransaction::Call.into(),
+            }
+        }
+    }
 }
 
 /// Payload used by this example crate to hold price
 /// data required to submit a transaction.
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-pub struct WeightsPayload<Public, AccountId, BlockNumber> {
+pub struct WeightsPayload<Public> {
     subnet_id: u16,
-    epoch: BlockNumber,
-    module_key: AccountId,
-    decrypted_weights: Vec<u8>,
+    decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
     public: Public,
 }
 
-impl<T: SigningTypes> SignedPayload<T>
-    for WeightsPayload<T::Public, T::AccountId, BlockNumberFor<T>>
-{
+impl<T: SigningTypes> SignedPayload<T> for WeightsPayload<T::Public> {
+    fn public(&self) -> T::Public {
+        self.public.clone()
+    }
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+pub struct KeepAlivePayload<Public> {
+    public_key: (Vec<u8>, Vec<u8>),
+    public: Public,
+}
+
+impl<T: SigningTypes> SignedPayload<T> for KeepAlivePayload<T::Public> {
     fn public(&self) -> T::Public {
         self.public.clone()
     }
@@ -278,7 +381,7 @@ impl<T: SigningTypes> SignedPayload<T>
 impl<T: Config> Pallet<T> {
     #[must_use]
     pub fn should_decrpyt(
-        decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
+        decrypted_weights: &Vec<(u16, Vec<(u16, u16)>)>,
         latest_rumtime_yuma_params: ConsensusParams<T>,
         subnet_id: u16,
     ) -> bool {
@@ -328,7 +431,7 @@ impl<T: Config> Pallet<T> {
     /// Appends copier information to simulated consensus ConsensusParams
     /// Overwrites onchain decrypted weights with the offchain workers' decrypted weights
     pub fn compute_simulation_yuma_params(
-        decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
+        decrypted_weights: &Vec<(u16, Vec<(u16, u16)>)>,
         mut runtime_yuma_params: ConsensusParams<T>,
         subnet_id: u16,
         // Return copier uid and ConsensusParams
@@ -356,7 +459,7 @@ impl<T: Config> Pallet<T> {
 
         // Create a map of uid to decrypted weights for easier lookup
         let decrypted_weights_map: BTreeMap<u16, Vec<(u16, u16)>> =
-            decrypted_weights.into_iter().collect();
+            decrypted_weights.iter().cloned().collect();
 
         // Update the modules in runtime_yuma_params
         for (_, module) in runtime_yuma_params.modules.iter_mut() {
@@ -437,6 +540,36 @@ impl<T: Config> Pallet<T> {
         }
 
         runtime_yuma_params
+    }
+
+    fn send_weights(
+        netuid: u16,
+        decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
+    ) -> Result<(), &'static str> {
+        let signer = Signer::<T, T::AuthorityId>::all_accounts();
+        if !signer.can_sign() {
+            return Err(
+                "No local accounts available. Consider adding one via `author_insertKey` RPC.",
+            );
+        }
+
+        // signer.send_unsigned_transaction(
+        //     |account| {
+        //         WeightsPayload {
+        //             subnet_id: netuid,
+        //             epoch: 0u64,      // TODO
+        //             module_key: 0u64, // TODO
+        //             decrypted_weights,
+        //             public: account.public.clone(),
+        //         }
+        //     },
+        //     |payload, signature| Call::<T>::submit_price_unsigned_with_signed_payload {
+        //         price_payload: payload,
+        //         signature,
+        //     },
+        // );
+
+        Ok(())
     }
 }
 
