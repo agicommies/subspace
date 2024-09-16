@@ -54,5 +54,3 @@ sp-io.workspace = true
 sp-version.workspace = true
 # Substrate
 sp-tracing.workspace = true
-parity-util-mem = { workspace = true, features = ['primitive-types'] }
-rand.workspace = true
