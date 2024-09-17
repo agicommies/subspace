@@ -54,3 +54,21 @@ fn test_rsa() {
         assert_eq!(decrypted, to_encrypt);
     });
 }
+
+#[test]
+fn test_hash() {
+    new_test_ext().execute_with(|| {
+        let mut uids = [0u16; 16];
+        let mut weights = [0u16; 16];
+
+        rand::thread_rng().fill(&mut uids[..]);
+        rand::thread_rng().fill(&mut weights[..]);
+
+        let to_hash = zip(uids, weights).collect::<Vec<(_, _)>>();
+
+        let hash1 = testthing::offworker::hash_weight(to_hash.clone()).unwrap();
+        let hash2 = testthing::offworker::hash_weight(to_hash.clone()).unwrap();
+
+        assert_eq!(hash1, hash2);
+    });
+}

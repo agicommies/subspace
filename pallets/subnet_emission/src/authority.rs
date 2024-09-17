@@ -65,6 +65,23 @@ impl<T: Config> Pallet<T> {
             return;
         };
 
+        for (uid, weights) in &weights {
+            let Some(hash) = EncryptedWeightHashes::<T>::get(netuid, uid) else {
+                // Something went wrong
+                return;
+            };
+
+            let Some(hashed) = testthing::offworker::hash_weight(weights.clone()) else {
+                // Something went wrong
+                return;
+            };
+
+            if hash != hashed {
+                // incorrect hash
+                return;
+            }
+        }
+
         // TODO check weight hashes
         // TODO do stuff with decrypted weights
 
