@@ -115,8 +115,7 @@ impl<T: Config> YumaEpoch<T> {
         let max_validators = self.max_allowed_validators;
         let mut new_permits = vec![false; stake.as_ref().len()];
 
-        let mut sorted_indexed_stake: Vec<(u16, T::AccountId, u64)> = (0u16..(stake.as_ref().len()
-            as u16))
+        let mut sorted_indexed_stake: Vec<(u16, u64)> = (0u16..(stake.as_ref().len() as u16))
             .map(|idx| {
                 self.weight_counter.read(1);
                 let key = match PalletSubspace::<T>::get_key_for_uid(self.netuid, idx) {
@@ -126,10 +125,10 @@ impl<T: Config> YumaEpoch<T> {
 
                 self.weight_counter.read(1);
                 let stake = PalletSubspace::<T>::get_delegated_stake(&key);
-                Ok((idx, key, stake))
+                Ok((idx, stake))
             })
             .collect::<Result<Vec<_>, EmissionError>>()?;
-        sorted_indexed_stake.sort_by_key(|(_, _, stake)| *stake);
+        sorted_indexed_stake.sort_by_key(|(_, stake)| *stake);
         sorted_indexed_stake.reverse();
 
         let current_block = PalletSubspace::<T>::get_current_block_number();
@@ -137,7 +136,7 @@ impl<T: Config> YumaEpoch<T> {
         let min_stake = pallet_subspace::MinValidatorStake::<T>::get(self.netuid);
         self.weight_counter.read(1);
         let mut validator_count = 0;
-        for (idx, key, stake) in sorted_indexed_stake {
+        for (idx, stake) in sorted_indexed_stake {
             if max_validators.is_some_and(|max| max <= validator_count) {
                 break;
             }
