@@ -421,10 +421,6 @@ pub mod pallet {
         FloorFounderShare::<T>::get() as u16
     }
 
-    #[pallet::storage]
-    pub type ValidatorBlacklist<T: Config> =
-        StorageMap<_, Identity, u16, BTreeSet<T::AccountId>, ValueQuery>;
-
     // ---------------------------------
     // Module Variables
     // ---------------------------------

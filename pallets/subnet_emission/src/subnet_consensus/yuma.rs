@@ -4,8 +4,8 @@ use frame_support::{ensure, weights::Weight, DebugNoBound};
 use pallet_subspace::{
     math::*, Active, Bonds, BondsMovingAverage, Config, Consensus, Dividends, Emission, Founder,
     Incentive, Kappa, Keys, LastUpdate, MaxAllowedValidators, MaxWeightAge,
-    Pallet as PalletSubspace, PruningScores, Rank, Trust, Uids, ValidatorBlacklist,
-    ValidatorPermits, ValidatorTrust, Vec, Weights, N,
+    Pallet as PalletSubspace, PruningScores, Rank, Trust, Uids, ValidatorPermits, ValidatorTrust,
+    Vec, Weights, N,
 };
 use sp_std::vec;
 use substrate_fixed::types::{I32F32, I64F64, I96F32};
@@ -132,8 +132,6 @@ impl<T: Config> YumaEpoch<T> {
         sorted_indexed_stake.sort_by_key(|(_, _, stake)| *stake);
         sorted_indexed_stake.reverse();
 
-        let blacklist = ValidatorBlacklist::<T>::get(self.netuid);
-        self.weight_counter.read(1);
         let current_block = PalletSubspace::<T>::get_current_block_number();
         self.weight_counter.read(1);
         let min_stake = pallet_subspace::MinValidatorStake::<T>::get(self.netuid);
@@ -142,10 +140,6 @@ impl<T: Config> YumaEpoch<T> {
         for (idx, key, stake) in sorted_indexed_stake {
             if max_validators.is_some_and(|max| max <= validator_count) {
                 break;
-            }
-
-            if blacklist.contains(&key) {
-                continue;
             }
 
             if stake < min_stake {
