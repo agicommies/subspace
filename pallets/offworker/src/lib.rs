@@ -2,14 +2,12 @@
 
 extern crate alloc;
 
-use std::collections::BTreeMap;
-
 use alloc::vec::Vec;
 use frame_support::traits::Get;
 use frame_system::{
     offchain::{
-        AppCrypto, CreateSignedTransaction, SendUnsignedTransaction, SignedPayload, Signer,
-        SigningTypes,
+        AppCrypto, CreateSignedTransaction, SendSignedTransaction, SendUnsignedTransaction,
+        SignedPayload, Signer, SigningTypes,
     },
     pallet_prelude::BlockNumberFor,
 };
@@ -23,6 +21,7 @@ use pallet_subnet_emission::{
     },
     EncryptedWeights,
 };
+use std::collections::BTreeMap;
 
 use pallet_subnet_emission::Weights;
 use pallet_subspace::{
@@ -161,19 +160,19 @@ pub mod pallet {
         fn offchain_worker(block_number: BlockNumberFor<T>) {
             log::info!("Offchain worker is running");
 
-            if !testthing::offworker::is_authority_node() {
+            if !ow_extensions::offworker::is_decryption_node() {
                 return;
             }
 
             let public_key: (Vec<u8>, Vec<u8>) = (vec![], vec![]);
 
-            let subnets = pallet_subnet_emission::SubnetAuthorityData::<T>::iter()
+            let subnets = pallet_subnet_emission::SubnetDecryptionData::<T>::iter()
                 .filter_map(|(netuid, data)| {
                     if !pallet_subspace::UseWeightsEncrytyption::<T>::get(netuid) {
                         return None;
                     }
 
-                    if data.authority_public_key != public_key {
+                    if data.node_public_key != public_key {
                         return None;
                     }
 
@@ -201,31 +200,41 @@ pub mod pallet {
                         })
                         .collect();
 
+                let mut epochs = Vec::new();
                 for (param_block, params) in new_params {
-                    // Try to decrypt the weight here
-                    // TODO: Decrypt Encrypted Weight
-                    let decrypted_weights = EncryptedWeights::<T>::iter_prefix(subnet_id)
-                        .map(|(validator, encrypted)| {
-                            match testthing::offworker::decrypt_weight(encrypted) {
-                                Some(decrypted) => Some((validator, decrypted)),
+                    let decrypted_weights = params
+                        .modules
+                        .iter()
+                        .filter_map(
+                            |(key, params)| match ow_extensions::offworker::decrypt_weight(
+                                params.weight_encrypted.clone(),
+                            ) {
+                                Some(decrypted) => {
+                                    match pallet_subspace::Pallet::<T>::get_uid_for_key(
+                                        subnet_id, &key.0,
+                                    ) {
+                                        Some(uid) => Some((uid, decrypted)),
+                                        None => None,
+                                    }
+                                }
                                 None => None,
-                            }
-                        })
-                        .collect::<Option<Vec<_>>>();
+                            },
+                        )
+                        .collect::<Vec<_>>();
 
-                    if let Some(decrypted_weights) = decrypted_weights {
-                        let should_decrypt: bool =
-                            Self::should_decrpyt(&decrypted_weights, params, subnet_id);
+                    let should_decrypt: bool =
+                        Self::should_decrpyt(&decrypted_weights, params, subnet_id);
 
-                        if should_decrypt {
-                            if let Err(err) = Self::send_weights(subnet_id, decrypted_weights) {
-                                log::error!("couldn't send weights to runtime: {err}");
-                            }
-                        }
+                    if should_decrypt {
+                        epochs.push((param_block, decrypted_weights));
                     }
 
                     // Update the last processed block in local storage
                     storage.set(&param_block);
+                }
+
+                if let Err(err) = Self::send_weights(subnet_id, epochs) {
+                    log::error!("couldn't send weights to runtime: {err}");
                 }
             }
         }
@@ -238,14 +247,14 @@ pub mod pallet {
         #[pallet::weight({0})]
         pub fn send_decrypted_weights(
             origin: OriginFor<T>,
-            price_payload: WeightsPayload<T::Public>,
-            _signature: T::Signature,
+            subnet_id: u16,
+            decrypted_weights: Vec<(u64, Vec<(u16, Vec<(u16, u16)>)>)>,
         ) -> DispatchResultWithPostInfo {
             ensure_none(origin)?;
 
             pallet_subnet_emission::Pallet::<T>::handle_decrypted_weights(
-                price_payload.subnet_id,
-                price_payload.decrypted_weights,
+                subnet_id,
+                decrypted_weights,
             );
 
             Ok(().into())
@@ -255,14 +264,11 @@ pub mod pallet {
         #[pallet::weight({0})]
         pub fn send_keep_alive(
             origin: OriginFor<T>,
-            keep_alive_payload: KeepAlivePayload<T::Public>,
-            _signature: T::Signature,
+            public_key: (Vec<u8>, Vec<u8>),
         ) -> DispatchResultWithPostInfo {
             ensure_none(origin)?;
 
-            pallet_subnet_emission::Pallet::<T>::handle_authority_node_keep_alive(
-                keep_alive_payload.public_key,
-            );
+            pallet_subnet_emission::Pallet::<T>::handle_authority_node_keep_alive(public_key);
 
             Ok(().into())
         }
@@ -303,79 +309,6 @@ pub mod pallet {
     #[pallet::storage]
     pub type MeasuredStakeAmount<T: Config> =
         StorageValue<_, Percent, ValueQuery, DefaultMeasuredStakeAmount<T>>;
-
-    const UNSIGNED_TXS_PRIORITY: u64 = 0; // TODO
-
-    #[pallet::validate_unsigned]
-    impl<T: Config> ValidateUnsigned for Pallet<T> {
-        type Call = Call<T>;
-
-        fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-            let valid_tx = |provide| {
-                ValidTransaction::with_tag_prefix("ocw-demo")
-                    .priority(UNSIGNED_TXS_PRIORITY)
-                    .and_provides([&provide])
-                    .longevity(3)
-                    .propagate(true)
-                    .build()
-            };
-
-            match call {
-                Call::send_decrypted_weights {
-                    ref price_payload,
-                    ref signature,
-                } => {
-                    if !SignedPayload::<T>::verify::<T::AuthorityId>(
-                        price_payload,
-                        signature.clone(),
-                    ) {
-                        return InvalidTransaction::BadProof.into();
-                    }
-                    valid_tx(b"send_decrypted_weights".to_vec())
-                }
-                Call::send_keep_alive {
-                    ref keep_alive_payload,
-                    ref signature,
-                } => {
-                    if !SignedPayload::<T>::verify::<T::AuthorityId>(
-                        keep_alive_payload,
-                        signature.clone(),
-                    ) {
-                        return InvalidTransaction::BadProof.into();
-                    }
-                    valid_tx(b"send_decrypted_weights".to_vec())
-                }
-                _ => InvalidTransaction::Call.into(),
-            }
-        }
-    }
-}
-
-/// Payload used by this example crate to hold price
-/// data required to submit a transaction.
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-pub struct WeightsPayload<Public> {
-    subnet_id: u16,
-    decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
-    public: Public,
-}
-
-impl<T: SigningTypes> SignedPayload<T> for WeightsPayload<T::Public> {
-    fn public(&self) -> T::Public {
-        self.public.clone()
-    }
-}
-
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-pub struct KeepAlivePayload<Public> {
-    public_key: (Vec<u8>, Vec<u8>),
-    public: Public,
-}
-
-impl<T: SigningTypes> SignedPayload<T> for KeepAlivePayload<T::Public> {
-    fn public(&self) -> T::Public {
-        self.public.clone()
-    }
 }
 
 impl<T: Config> Pallet<T> {
@@ -473,13 +406,6 @@ impl<T: Config> Pallet<T> {
                     onchain_weights.iter().find(|(w_uid, _)| *w_uid == uid).map(|(_, w)| w.clone())
                 })
                 .unwrap_or_default();
-
-            // TODO:
-            // eventually we will move the decrypted weights out of `ConsensusParams`,
-            // so this is a temporary solution
-
-            // Update the weights_unencrypted field
-            module.weights_unencrypted = weights;
         }
 
         (copier_uid, runtime_yuma_params)
@@ -518,7 +444,6 @@ impl<T: Config> Pallet<T> {
             bonds: Vec::new(),
             weight_unencrypted_hash: Vec::new(),
             weight_encrypted: Vec::new(),
-            weights_unencrypted: weights,
         };
 
         let seed = (b"copier", subnet_id, copier_uid).using_encoded(BlakeTwo256::hash);
@@ -544,7 +469,7 @@ impl<T: Config> Pallet<T> {
 
     fn send_weights(
         netuid: u16,
-        decrypted_weights: Vec<(u16, Vec<(u16, u16)>)>,
+        decrypted_weights: Vec<(u64, Vec<(u16, Vec<(u16, u16)>)>)>,
     ) -> Result<(), &'static str> {
         let signer = Signer::<T, T::AuthorityId>::all_accounts();
         if !signer.can_sign() {
@@ -553,21 +478,10 @@ impl<T: Config> Pallet<T> {
             );
         }
 
-        // signer.send_unsigned_transaction(
-        //     |account| {
-        //         WeightsPayload {
-        //             subnet_id: netuid,
-        //             epoch: 0u64,      // TODO
-        //             module_key: 0u64, // TODO
-        //             decrypted_weights,
-        //             public: account.public.clone(),
-        //         }
-        //     },
-        //     |payload, signature| Call::<T>::submit_price_unsigned_with_signed_payload {
-        //         price_payload: payload,
-        //         signature,
-        //     },
-        // );
+        signer.send_signed_transaction(|_| Call::send_decrypted_weights {
+            decrypted_weights: decrypted_weights.clone(),
+            subnet_id: netuid,
+        });
 
         Ok(())
     }

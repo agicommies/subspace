@@ -579,7 +579,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     sp_tracing::try_init_simple();
     let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
     let mut ext = sp_io::TestExternalities::new(t);
-    ext.register_extension(testthing::OffworkerExt::new(Decrypter::default()));
+    ext.register_extension(ow_extensions::OffworkerExt::new(Decrypter::default()));
     ext.execute_with(|| {});
     ext
 }
@@ -938,7 +938,7 @@ impl Default for Decrypter {
     }
 }
 
-impl testthing::OffworkerExtension for Decrypter {
+impl ow_extensions::OffworkerExtension for Decrypter {
     fn hash_weight(
         &self,
         weights: pallet_subspace::Vec<(u16, u16)>,
@@ -952,6 +952,7 @@ impl testthing::OffworkerExtension for Decrypter {
 
         Some(hasher.finalize().to_vec())
     }
+
     fn decrypt_weight(&self, encrypted: Vec<u8>) -> Option<Vec<(u16, u16)>> {
         let Some(key) = &self.key else {
             return None;
@@ -992,7 +993,7 @@ impl testthing::OffworkerExtension for Decrypter {
         Some(res)
     }
 
-    fn is_authority_node(&self) -> bool {
+    fn is_decryption_node(&self) -> bool {
         self.key.is_some()
     }
 

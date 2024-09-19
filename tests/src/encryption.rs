@@ -45,11 +45,11 @@ fn test_rsa() {
         let to_encrypt = zip(uids, weights).collect::<Vec<(_, _)>>();
 
         let encrypted = encrypt(
-            testthing::offworker::get_encryption_key().unwrap(),
+            ow_extensions::offworker::get_encryption_key().unwrap(),
             to_encrypt.clone(),
         );
 
-        let decrypted = testthing::offworker::decrypt_weight(encrypted).unwrap();
+        let decrypted = ow_extensions::offworker::decrypt_weight(encrypted).unwrap();
 
         assert_eq!(decrypted, to_encrypt);
     });
@@ -66,8 +66,8 @@ fn test_hash() {
 
         let to_hash = zip(uids, weights).collect::<Vec<(_, _)>>();
 
-        let hash1 = testthing::offworker::hash_weight(to_hash.clone()).unwrap();
-        let hash2 = testthing::offworker::hash_weight(to_hash.clone()).unwrap();
+        let hash1 = ow_extensions::offworker::hash_weight(to_hash.clone()).unwrap();
+        let hash2 = ow_extensions::offworker::hash_weight(to_hash.clone()).unwrap();
 
         assert_eq!(hash1, hash2);
     });

@@ -20,7 +20,7 @@ rsa.workspace = true
 bty = { workspace = true }
 csv = "1.1"
 
-testthing = { path = "../testthing" }
+ow_extensions = { path = "../ow_extensions" }
 
 frame-support = { workspace = true, features = ["std"] }
 frame-system = { workspace = true, features = ["std"] }

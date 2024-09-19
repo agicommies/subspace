@@ -21,7 +21,7 @@ pub trait OffworkerExtension: Send + 'static {
 
     fn decrypt_weight(&self, encrypted: Vec<u8>) -> Option<Vec<(u16, u16)>>;
 
-    fn is_authority_node(&self) -> bool;
+    fn is_decryption_node(&self) -> bool;
 
     fn get_encryption_key(&self) -> Option<(Vec<u8>, Vec<u8>)>;
 }
@@ -46,10 +46,10 @@ pub trait Offworker {
             .decrypt_weight(encrypted)
     }
 
-    fn is_authority_node(&mut self) -> bool {
+    fn is_decryption_node(&mut self) -> bool {
         self.extension::<OffworkerExt>()
             .expect("missing offworker ext")
-            .is_authority_node()
+            .is_decryption_node()
     }
 
     fn get_encryption_key(&mut self) -> Option<(sp_std::vec::Vec<u8>, sp_std::vec::Vec<u8>)> {

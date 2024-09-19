@@ -12,7 +12,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 // Pallet Imports
 // ==============
 
-pub mod authority;
+pub mod decryption;
 pub mod distribute_emission;
 pub mod migrations;
 pub mod subnet_pricing {
@@ -30,7 +30,7 @@ pub type PublicKey = (Vec<u8>, Vec<u8>);
 #[frame_support::pallet]
 pub mod pallet {
     use crate::{
-        authority::{AuthorityNodeInfo, SubnetEncryptionInfo},
+        decryption::{DecryptionNodeInfo, SubnetDecryptionInfo},
         subnet_consensus::util::params::ConsensusParams,
         *,
     };
@@ -111,13 +111,17 @@ pub mod pallet {
     pub type AuthorizedPublicKeys<T> = StorageValue<_, Vec<PublicKey>, ValueQuery>;
 
     #[pallet::storage]
-    pub type AuthorityNodes<T> = StorageValue<_, Vec<AuthorityNodeInfo>, ValueQuery>;
+    pub type DecryptionNodes<T> = StorageValue<_, Vec<DecryptionNodeInfo>, ValueQuery>;
 
     #[pallet::storage]
-    pub type SubnetAuthorityData<T> = StorageMap<_, Identity, u16, SubnetEncryptionInfo>;
+    pub type SubnetDecryptionData<T> = StorageMap<_, Identity, u16, SubnetDecryptionInfo>;
 
     #[pallet::storage]
-    pub type AuthorityNodeCursor<T> = StorageValue<_, u16, ValueQuery>;
+    pub type DecryptionNodeCursor<T> = StorageValue<_, u16, ValueQuery>;
+
+    #[pallet::storage]
+    pub type DecryptedWeights<T> =
+        StorageMap<_, Identity, u16, Vec<(u64, Vec<(u16, Vec<(u16, u16)>)>)>>;
 
     type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -296,7 +300,10 @@ pub mod pallet {
             0
         }
 
-        pub fn handle_decrypted_weights(netuid: u16, weights: Vec<(u16, Vec<(u16, u16)>)>) {
+        pub fn handle_decrypted_weights(
+            netuid: u16,
+            weights: Vec<(u64, Vec<(u16, Vec<(u16, u16)>)>)>,
+        ) {
             Self::do_handle_decrypted_weights(netuid, weights);
         }
 

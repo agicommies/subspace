@@ -2,7 +2,7 @@
 
 use futures::FutureExt;
 use node_subspace_runtime::{self, opaque::Block, RuntimeApi};
-use rsa::{rand_core::OsRng, traits::PublicKeyParts, Pkcs1v15Encrypt};
+use rsa::{pkcs1::DecodeRsaPrivateKey, rand_core::OsRng, traits::PublicKeyParts, Pkcs1v15Encrypt};
 use sc_client_api::Backend;
 use sc_consensus_manual_seal::consensus::{
     aura::AuraConsensusDataProvider, timestamp::SlotTimestampProvider,
@@ -19,7 +19,7 @@ use std::{
 
 type CustomHostFunctions = (
     sp_io::SubstrateHostFunctions,
-    testthing::offworker::HostFunctions,
+    ow_extensions::offworker::HostFunctions,
 );
 
 pub(crate) type FullClient =
@@ -140,7 +140,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
                 network_provider: network.clone(),
                 enable_http_requests: true,
                 custom_extensions: |_| {
-                    vec![Box::new(testthing::OffworkerExt::new(Decrypter::default())) as Box<_>]
+                    vec![Box::new(ow_extensions::OffworkerExt::new(Decrypter::default())) as Box<_>]
                 },
             })
             .run(client.clone(), task_manager.spawn_handle())
@@ -240,20 +240,32 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 }
 
 struct Decrypter {
-    // TODO: swap this with the node's decryption key type and store it once it starts
     key: Option<rsa::RsaPrivateKey>,
 }
 
 impl Default for Decrypter {
     fn default() -> Self {
-        // TODO try load from file
-        Self {
-            key: Some(rsa::RsaPrivateKey::new(&mut OsRng, 587).unwrap()),
+        let decryption_key_path = std::path::Path::new("decryption.pem");
+
+        if !decryption_key_path.exists() {
+            return Self { key: None };
         }
+
+        let Ok(content) = std::fs::read_to_string(decryption_key_path) else {
+            // log::error!("could not read key file contents");
+            return Self { key: None };
+        };
+
+        let Ok(key) = rsa::RsaPrivateKey::from_pkcs1_pem(&content) else {
+            // log::error!("could not read key from file contents");
+            return Self { key: None };
+        };
+
+        Self { key: Some(key) }
     }
 }
 
-impl testthing::OffworkerExtension for Decrypter {
+impl ow_extensions::OffworkerExtension for Decrypter {
     fn hash_weight(&self, weights: Vec<(u16, u16)>) -> Option<Vec<u8>> {
         let mut hasher = sha2::Sha256::new();
         hasher.update((weights.len() as u32).to_be_bytes());
@@ -305,7 +317,7 @@ impl testthing::OffworkerExtension for Decrypter {
         Some(res)
     }
 
-    fn is_authority_node(&self) -> bool {
+    fn is_decryption_node(&self) -> bool {
         self.key.is_some()
     }
 
