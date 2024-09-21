@@ -12,12 +12,12 @@ use frame_system::{
 };
 use pallet_governance::GlobalGovernanceConfig;
 use pallet_governance_api::*;
-use pallet_offworker::{crypto::Signature, Call as OffworkerCall, MeasuredStakeAmount};
+use pallet_offworker::{crypto::Signature, Call as OffworkerCall};
 use pallet_subnet_emission_api::{SubnetConsensus, SubnetEmissionApi};
 use pallet_subspace::{
-    subnet::SubnetChangeset, Active, Address, DefaultKey, DefaultSubnetParams, Dividends, Emission,
+    subnet::SubnetChangeset, Address, DefaultKey, DefaultSubnetParams, Dividends, Emission,
     Incentive, LastUpdate, MaxRegistrationsPerBlock, Name, StakeFrom, StakeTo, SubnetBurn,
-    SubnetBurnConfig, SubnetParams, Tempo, TotalStake, N,
+    SubnetParams, Tempo, TotalStake, N,
 };
 use parity_scale_codec::{Decode, Encode};
 use rand::rngs::OsRng;
@@ -602,15 +602,14 @@ pub fn get_total_subnet_balance(netuid: u16) -> u64 {
     keys.iter().map(SubspaceMod::get_balance_u64).sum()
 }
 
-/// Appends weight copier validator
-pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
-    // let copier_stake = pallet_offworker::get_copier_stake::<Test>(netuid);
-    let copier_stake = 0;
-    // registers module if not already registered
-    let _ = register_module(netuid, key, copier_stake, false);
-    step_block(1);
-    set_weights(netuid, key, uids, values);
-}
+// /// Appends weight copier validator
+// pub fn add_weight_copier(netuid: u16, key: u32, uids: Vec<u16>, values: Vec<u16>) {
+//     let copier_stake = pallet_offworker::get_copier_stake::<Test>(netuid);
+//     // registers module if not already registered
+//     let _ = register_module(netuid, key, copier_stake, false);
+//     step_block(1);
+//     set_weights(netuid, key, uids, values);
+// }
 
 #[allow(dead_code)]
 pub(crate) fn step_block(n: u16) {

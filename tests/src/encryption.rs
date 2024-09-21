@@ -1,8 +1,8 @@
 use std::iter::zip;
 
 use crate::mock::*;
-use rand::{rngs::OsRng, thread_rng, Rng, RngCore};
-use rsa::{traits::PublicKeyParts, BigUint, Pkcs1v15Encrypt};
+use rand::{rngs::OsRng, thread_rng, Rng};
+use rsa::{BigUint, Pkcs1v15Encrypt};
 
 fn encrypt(key: (Vec<u8>, Vec<u8>), data: Vec<(u16, u16)>) -> Vec<u8> {
     let mut encoded = Vec::new();

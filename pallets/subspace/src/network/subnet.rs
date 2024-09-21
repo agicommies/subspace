@@ -1,11 +1,10 @@
-use super::*;
+use crate::*;
 
 use frame_support::{
     pallet_prelude::DispatchResult, storage::IterableStorageMap, IterableStorageDoubleMap,
 };
 use pallet_subnet_emission_api::SubnetConsensus;
 
-use global::{BurnType, GeneralBurnConfiguration};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::vec::Vec;
 use substrate_fixed::types::I64F64;
@@ -556,43 +555,5 @@ impl<T: Config> Pallet<T> {
             T::get_subnet_consensus_type(netuid),
             Some(SubnetConsensus::Root)
         )
-    }
-
-    pub fn do_add_blacklist(
-        origin: T::RuntimeOrigin,
-        netuid: u16,
-        module: T::AccountId,
-    ) -> DispatchResult {
-        let key = ensure_signed(origin)?;
-
-        let params = Self::subnet_params(netuid);
-        ensure!(params.founder == key, Error::<T>::NotFounder);
-
-        let mut blacklist = ValidatorBlacklist::<T>::get(netuid);
-        ensure!(!blacklist.contains(&module), Error::<T>::AlreadyBlacklisted);
-
-        blacklist.insert(module);
-        ValidatorBlacklist::<T>::set(netuid, blacklist);
-
-        Ok(())
-    }
-
-    pub fn do_remove_blacklist(
-        origin: T::RuntimeOrigin,
-        netuid: u16,
-        module: T::AccountId,
-    ) -> DispatchResult {
-        let key = ensure_signed(origin)?;
-
-        let params = Self::subnet_params(netuid);
-        ensure!(params.founder == key, Error::<T>::NotFounder);
-
-        let mut blacklist = ValidatorBlacklist::<T>::get(netuid);
-        ensure!(blacklist.contains(&module), Error::<T>::NotBlacklisted);
-
-        blacklist.remove(&module);
-        ValidatorBlacklist::<T>::set(netuid, blacklist);
-
-        Ok(())
     }
 }
