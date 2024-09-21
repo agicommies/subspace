@@ -2,7 +2,7 @@
 
 use futures::FutureExt;
 use node_subspace_runtime::{self, opaque::Block, RuntimeApi};
-use rsa::{pkcs1::DecodeRsaPrivateKey, rand_core::OsRng, traits::PublicKeyParts, Pkcs1v15Encrypt};
+use rsa::{pkcs1::DecodeRsaPrivateKey, traits::PublicKeyParts, Pkcs1v15Encrypt};
 use sc_client_api::Backend;
 use sc_consensus_manual_seal::consensus::{
     aura::AuraConsensusDataProvider, timestamp::SlotTimestampProvider,
@@ -286,7 +286,7 @@ impl ow_extensions::OffworkerExtension for Decrypter {
             .chunks(dbg!(key.size()))
             .map(|chunk| match key.decrypt(Pkcs1v15Encrypt, &chunk) {
                 Ok(decrypted) => Some(decrypted),
-                Err(err) => None,
+                Err(_) => None,
             })
             .collect::<Option<Vec<Vec<u8>>>>()
         else {

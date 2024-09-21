@@ -276,7 +276,7 @@ pub mod pallet {
 
     /// Events for the pallet.
     #[pallet::event]
-    #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    // #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event generated when new price is accepted to contribute to the average.
         NewPrice {
