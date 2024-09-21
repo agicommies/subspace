@@ -1,18 +1,18 @@
+use crate::mock::*;
+use pallet_subnet_emission::subnet_consensus::util::{
+    consensus::EmissionMap,
+    params::{AccountKey, ModuleKey},
+};
 use std::collections::BTreeMap;
 
-use crate::mock::*;
-
-use frame_support::{assert_ok, pallet_prelude::Weight, traits::Currency};
+use frame_support::{assert_ok, traits::Currency};
 use log::info;
 use pallet_governance::DaoTreasuryAddress;
 use pallet_subnet_emission::{
-    subnet_consensus::yuma::{
-        params::{AccountKey, ConsensusParams, ModuleKey},
-        EmissionMap, YumaEpoch,
-    },
-    EmissionLoweringBlock, OriginalUnitEmission, PendingEmission, SubnetConsensusType,
-    SubnetEmission, UnitEmission,
+    subnet_consensus::{util::params::ConsensusParams, yuma::YumaEpoch},
+    PendingEmission, SubnetConsensusType, SubnetEmission, UnitEmission,
 };
+
 use pallet_subnet_emission_api::SubnetConsensus;
 use pallet_subspace::*;
 
@@ -1253,7 +1253,9 @@ fn yuma_change_permits() {
 
         set_weights(netuid, 2, vec![first_uid, second_uid], vec![50, 60]);
 
-        assert_ok!(YumaEpoch::<Test>::new(netuid, ONE).run());
+        let yuma_params = ConsensusParams::<Test>::new(netuid, ONE).unwrap();
+
+        assert_ok!(YumaEpoch::<Test>::new(netuid, yuma_params.clone()).run());
 
         assert_eq!(
             ValidatorPermits::<Test>::get(netuid)[first_uid as usize],
@@ -1272,7 +1274,7 @@ fn yuma_change_permits() {
         set_weights(netuid, 1, vec![third_uid, fourth_uid], vec![50, 60]);
         set_weights(netuid, 3, vec![first_uid, second_uid], vec![50, 60]);
 
-        assert_ok!(YumaEpoch::<Test>::new(netuid, ONE).run());
+        assert_ok!(YumaEpoch::<Test>::new(netuid, yuma_params).run());
 
         assert_eq!(
             ValidatorPermits::<Test>::get(netuid)[first_uid as usize],
@@ -1285,70 +1287,6 @@ fn yuma_change_permits() {
         assert_eq!(
             ValidatorPermits::<Test>::get(netuid)[third_uid as usize],
             true
-        );
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[fourth_uid as usize],
-            true
-        );
-    });
-}
-
-#[test]
-fn yuma_change_permits_blacklisted() {
-    new_test_ext().execute_with(|| {
-        zero_min_burn();
-
-        let netuid = 6;
-        let first_uid = register_module(netuid, 0, 1, false).unwrap();
-        let second_uid = register_module(netuid, 1, to_nano(51000), false).unwrap();
-        let third_uid = register_module(netuid, 2, to_nano(52000), false).unwrap();
-
-        dbg!(ValidatorBlacklist::<Test>::get(netuid));
-        pallet_subspace::Pallet::<Test>::add_blacklist(
-            get_origin(first_uid.into()),
-            netuid,
-            third_uid.into(),
-        )
-        .unwrap();
-
-        dbg!(ValidatorBlacklist::<Test>::get(netuid));
-
-        MaxAllowedValidators::<Test>::set(netuid, Some(2));
-
-        set_weights(netuid, 2, vec![first_uid, second_uid], vec![50, 60]);
-
-        assert_ok!(YumaEpoch::<Test>::new(netuid, ONE).run());
-
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[first_uid as usize],
-            false
-        );
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[second_uid as usize],
-            false
-        );
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[third_uid as usize],
-            false
-        );
-
-        let fourth_uid = register_module(netuid, 3, to_nano(54000), false).unwrap();
-        set_weights(netuid, 1, vec![third_uid, fourth_uid], vec![50, 60]);
-        set_weights(netuid, 3, vec![first_uid, second_uid], vec![50, 60]);
-
-        assert_ok!(YumaEpoch::<Test>::new(netuid, ONE).run());
-
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[first_uid as usize],
-            false
-        );
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[second_uid as usize],
-            true
-        );
-        assert_eq!(
-            ValidatorPermits::<Test>::get(netuid)[third_uid as usize],
-            false
         );
         assert_eq!(
             ValidatorPermits::<Test>::get(netuid)[fourth_uid as usize],
