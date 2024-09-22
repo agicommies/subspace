@@ -4788,6 +4788,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "node-subspace-runtime",
+ "ow_extensions",
  "pallet-subspace-genesis-config",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
@@ -4811,6 +4812,7 @@ dependencies = [
  "sc-transaction-pool-api",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
@@ -4827,7 +4829,6 @@ dependencies = [
  "subspace-rpc",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
- "testthing",
 ]
 
 [[package]]
@@ -5112,6 +5113,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
+name = "ow_extensions"
+version = "0.1.0"
+dependencies = [
+ "sp-externalities 0.25.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
+ "sp-runtime-interface 24.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
+]
+
+[[package]]
 name = "pallet-aura"
 version = "27.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1#8eb1f5592d15c7c748fbe21c2ea951d3bfe890e2"
@@ -5285,6 +5295,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "ow_extensions",
  "pallet-aura",
  "pallet-subnet-emission",
  "pallet-subspace",
@@ -5297,7 +5308,6 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
  "sp-tracing 16.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
  "substrate-fixed",
- "testthing",
 ]
 
 [[package]]
@@ -5330,6 +5340,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "ow_extensions",
  "pallet-balances",
  "pallet-governance-api",
  "pallet-subnet-emission-api",
@@ -9530,6 +9541,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "ow_extensions",
  "pallet-balances",
  "pallet-governance",
  "pallet-governance-api",
@@ -9542,6 +9554,7 @@ dependencies = [
  "rsa",
  "scale-info",
  "serde_json",
+ "sha2 0.10.8",
  "sp-arithmetic",
  "sp-core",
  "sp-io",
@@ -9549,16 +9562,6 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
  "sp-tracing 16.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
  "substrate-fixed",
- "testthing",
-]
-
-[[package]]
-name = "testthing"
-version = "0.1.0"
-dependencies = [
- "sp-externalities 0.25.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
- "sp-runtime-interface 24.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.10.1)",
 ]
 
 [[package]]
