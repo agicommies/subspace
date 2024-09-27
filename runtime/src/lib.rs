@@ -176,7 +176,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    spec_version: 122,
+    spec_version: 422,
     impl_version: 1,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -446,6 +446,10 @@ pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 );
 pub const MAXIMUM_BLOCK_LENGTH: u32 = 5 * 1024 * 1024;
 
+parameter_types! {
+    pub EthereumChainId: u64 = 9461;
+}
+
 // EVM
 impl pallet_evm_chain_id::Config for Runtime {}
 
@@ -487,7 +491,7 @@ impl pallet_evm::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type PrecompilesType = FrontierPrecompiles<Self>;
     type PrecompilesValue = PrecompilesValue;
-    type ChainId = EVMChainId;
+    type ChainId = EthereumChainId;
     type BlockGasLimit = BlockGasLimit;
     type Runner = pallet_evm::runner::stack::Runner<Self>;
     type OnChargeTransaction = ();
@@ -564,7 +568,6 @@ construct_runtime!(
         // EVM Support
         EVM: pallet_evm,
         Ethereum: pallet_ethereum,
-        EVMChainId: pallet_evm_chain_id,
         BaseFee: pallet_base_fee,
         DynamicFee: pallet_dynamic_fee,
     }

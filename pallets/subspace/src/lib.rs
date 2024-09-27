@@ -71,7 +71,7 @@ pub mod pallet {
     use sp_core::{ConstU16, ConstU64, ConstU8};
     pub use sp_std::{vec, vec::Vec};
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(13);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(31);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
