@@ -65,6 +65,8 @@ use sp_runtime::{
     ApplyExtrinsicResult, ConsensusEngineId, DispatchResult, MultiSignature,
 };
 
+use parity_scale_codec::{Decode, Encode};
+
 // Substrate versioning
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -117,25 +119,29 @@ pub use pallet_subspace;
 mod precompiles;
 use precompiles::FrontierPrecompiles;
 
-// An index to a block.
+/// An index to a block.
 pub type BlockNumber = u64;
 
-// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
+/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
 
-// Some way of identifying an account on the chain. We intentionally make it equivalent
-// to the public key of our transaction signing scheme.
+/// Some way of identifying an account on the chain. We intentionally make it equivalent
+/// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-// Balance of an account.
+/// Balance of an account.
 pub type Balance = u64;
 
-// Index of a transaction in the chain.
+/// Index of a transaction in the chain.
 pub type Index = u64;
 
-// A hash of some data used by the chain.
+/// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
+/// The hashing algorithm used by the chain.
+pub type Hashing = BlakeTwo256;
+
+/// Index of a transaction in the chain.
 pub type Nonce = u32;
 
 // Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -176,7 +182,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    spec_version: 422,
+    spec_version: 423,
     impl_version: 1,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -575,6 +581,28 @@ construct_runtime!(
 
 #[derive(Clone)]
 pub struct TransactionConverter;
+
+impl fp_rpc::ConvertTransaction<UncheckedExtrinsic> for TransactionConverter {
+    fn convert_transaction(&self, transaction: pallet_ethereum::Transaction) -> UncheckedExtrinsic {
+        UncheckedExtrinsic::new_unsigned(
+            pallet_ethereum::Call::<Runtime>::transact { transaction }.into(),
+        )
+    }
+}
+
+impl fp_rpc::ConvertTransaction<opaque::UncheckedExtrinsic> for TransactionConverter {
+    fn convert_transaction(
+        &self,
+        transaction: pallet_ethereum::Transaction,
+    ) -> opaque::UncheckedExtrinsic {
+        let extrinsic = UncheckedExtrinsic::new_unsigned(
+            pallet_ethereum::Call::<Runtime>::transact { transaction }.into(),
+        );
+        let encoded = extrinsic.encode();
+        opaque::UncheckedExtrinsic::decode(&mut &encoded[..])
+            .expect("Encoded extrinsic is always valid")
+    }
+}
 
 // The address format for describing accounts.
 pub type Address = sp_runtime::MultiAddress<AccountId, ()>;

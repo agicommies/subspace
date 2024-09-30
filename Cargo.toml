@@ -30,6 +30,7 @@ match_bool = "deny"
 infinite_loop = "deny"
 
 [workspace.dependencies]
+async-trait = "0.1"
 # External dependencies
 bty = { version = "0.2.0", default-features = false }
 futures = "0.3.21"
@@ -45,6 +46,7 @@ serde_json = { version = "1.0.108", default-features = false, features = [
 smallvec = "1.6.1"
 
 # Parity Substrate
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2407" }
 substrate-fixed = { git = 'https://github.com/encointer/substrate-fixed.git', tag = "v0.5.9" }
 scale-info = { version = "2.10.0", default-features = false, features = [
     "derive",
@@ -52,8 +54,12 @@ scale-info = { version = "2.10.0", default-features = false, features = [
 parity-scale-codec = { version = "3.6.5", features = [
     "derive",
 ], default-features = false }
+scale-codec = { package = "parity-scale-codec", version = "3.6.12", default-features = false, features = [
+    "derive",
+] }
 
 # EVM Support
+
 # Frontier
 fp-account = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false, features = [
     "serde",
@@ -65,14 +71,22 @@ fp-self-contained = { git = "https://github.com/paritytech/frontier", branch = "
 fp-evm = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false, features = [
     "serde",
 ] }
+fp-dynamic-fee = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+
 fc-rpc-core = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+fc-api = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+fc-cli = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 fc-db = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 fc-rpc = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", features = [
-	"rpc-binary-search-estimate",
+    "rpc-binary-search-estimate",
 ] }
+fc-storage = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+fc-mapping-sync = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+fc-consensus = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+
 # Frontier FRAME
 pallet-base-fee = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
-pallet-dynamic-fee = { git = "https://github.com/gztensor/frontier", branch = "polkadot-v1.10.1", default-features = false }
+pallet-dynamic-fee = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 pallet-ethereum = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 pallet-evm = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 pallet-evm-chain-id = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
@@ -109,6 +123,7 @@ sc-consensus-manual-seal = { git = "https://github.com/paritytech/polkadot-sdk",
 sc-executor = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
 sc-keystore = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
 sc-network = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
+sc-network-sync = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
 sc-offchain = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
 sc-rpc = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
 sc-rpc-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1" }
