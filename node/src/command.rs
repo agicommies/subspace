@@ -60,7 +60,14 @@ impl SubstrateCli for Cli {
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
-    let cli = Cli::from_args();
+    let mut cli = Cli::from_args();
+    cli.run.shared_params.detailed_log_output = true;
+    cli.run.shared_params.log.extend([
+        "info".to_string(),
+        "pallet_subspace=debug".to_string(),
+        "pallet_governance=debug".to_string(),
+        "pallet_subnet_emission=debug".to_string(),
+    ]);
 
     match &cli.subcommand {
         Some(Subcommand::Key(cmd)) => cmd.run(&cli),
@@ -167,7 +174,7 @@ pub fn run() -> sc_cli::Result<()> {
             use frame_benchmarking_cli::{
                 BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE,
             };
-            use frontier_template_runtime::{Hashing, EXISTENTIAL_DEPOSIT};
+            use node_subspace_runtime::{Hashing, EXISTENTIAL_DEPOSIT};
 
             let runner = cli.create_runner(cmd)?;
             match cmd {
