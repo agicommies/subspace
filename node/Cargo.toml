@@ -22,6 +22,7 @@ name = "node-subspace"
 [dependencies]
 async-trait.workspace = true
 hex.workspace = true
+log.workspace = true
 
 # Commune
 node-subspace-runtime = { path = "../runtime" }

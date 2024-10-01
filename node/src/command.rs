@@ -60,14 +60,7 @@ impl SubstrateCli for Cli {
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
-    let mut cli = Cli::from_args();
-    cli.run.shared_params.detailed_log_output = true;
-    cli.run.shared_params.log.extend([
-        "info".to_string(),
-        "pallet_subspace=debug".to_string(),
-        "pallet_governance=debug".to_string(),
-        "pallet_subnet_emission=debug".to_string(),
-    ]);
+    let cli = Cli::from_args();
 
     match &cli.subcommand {
         Some(Subcommand::Key(cmd)) => cmd.run(&cli),
@@ -174,13 +167,12 @@ pub fn run() -> sc_cli::Result<()> {
             use frame_benchmarking_cli::{
                 BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE,
             };
-            use node_subspace_runtime::{Hashing, EXISTENTIAL_DEPOSIT};
+            use frontier_template_runtime::{Hashing, EXISTENTIAL_DEPOSIT};
 
             let runner = cli.create_runner(cmd)?;
             match cmd {
-                BenchmarkCmd::Pallet(cmd) => {
-                    runner.sync_run(|config| cmd.run::<Hashing, ()>(config))
-                }
+                BenchmarkCmd::Pallet(cmd) => runner
+                    .sync_run(|config| cmd.run_with_spec::<Hashing, ()>(Some(config.chain_spec))),
                 BenchmarkCmd::Block(cmd) => runner.sync_run(|mut config| {
                     let (client, _, _, _, _) = service::new_chain_ops(&mut config, &cli.eth)?;
                     cmd.run(client)
@@ -231,7 +223,7 @@ pub fn run() -> sc_cli::Result<()> {
                 let (client, _, _, _, frontier_backend) =
                     service::new_chain_ops(&mut config, &cli.eth)?;
                 let frontier_backend = match frontier_backend {
-                    fc_db::Backend::KeyValue(kv) => std::sync::Arc::new(kv),
+                    fc_db::Backend::KeyValue(kv) => kv,
                     _ => panic!("Only fc_db::Backend::KeyValue supported"),
                 };
                 cmd.run(client, frontier_backend)

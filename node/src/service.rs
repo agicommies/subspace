@@ -15,6 +15,8 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ConstructRuntimeApi;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_core::U256;
+use sp_runtime::traits::Block as BlockT;
+
 // Runtime
 use node_subspace_runtime::{opaque::Block, Hash, TransactionConverter};
 
@@ -23,7 +25,8 @@ use crate::{
     client::{BaseRuntimeApiCollection, FullBackend, FullClient, RuntimeApiCollection},
     eth::{
         new_frontier_partial, spawn_frontier_tasks, BackendType, EthCompatRuntimeApiCollection,
-        FrontierBackend, FrontierBlockImport, FrontierPartialComponents,
+        FrontierBackend, FrontierBlockImport, FrontierPartialComponents, StorageOverride,
+        StorageOverrideHandler,
     },
 };
 pub use crate::{
@@ -59,8 +62,8 @@ pub fn new_partial<RuntimeApi, Executor, BIQ>(
             Option<Telemetry>,
             BoxBlockImport,
             GrandpaLinkHalf<FullClient<RuntimeApi, Executor>>,
-            FrontierBackend,
-            Arc<fc_rpc::OverrideHandle<Block>>,
+            FrontierBackend<FullClient<RuntimeApi, Executor>>,
+            Arc<dyn StorageOverride<Block>>,
         ),
     >,
     ServiceError,
@@ -114,13 +117,13 @@ where
         telemetry.as_ref().map(|x| x.handle()),
     )?;
 
-    let overrides = crate::rpc::overrides_handle(client.clone());
+    let storage_override = Arc::new(StorageOverrideHandler::new(client.clone()));
     let frontier_backend = match eth_config.frontier_backend_type {
-        BackendType::KeyValue => FrontierBackend::KeyValue(fc_db::kv::Backend::open(
+        BackendType::KeyValue => FrontierBackend::KeyValue(Arc::new(fc_db::kv::Backend::open(
             Arc::clone(&client),
             &config.database,
             &db_config_dir(config),
-        )?),
+        )?)),
         BackendType::Sql => {
             let db_path = db_config_dir(config).join("sql");
             std::fs::create_dir_all(&db_path).expect("failed creating sql db directory");
@@ -137,10 +140,10 @@ where
                 }),
                 eth_config.frontier_sql_backend_pool_size,
                 std::num::NonZeroU32::new(eth_config.frontier_sql_backend_num_ops_timeout),
-                overrides.clone(),
+                storage_override.clone(),
             ))
             .unwrap_or_else(|err| panic!("failed creating sql backend: {:?}", err));
-            FrontierBackend::Sql(backend)
+            FrontierBackend::Sql(Arc::new(backend))
         }
     };
 
@@ -174,7 +177,7 @@ where
             block_import,
             grandpa_link,
             frontier_backend,
-            overrides,
+            storage_override,
         ),
     })
 }
@@ -255,7 +258,7 @@ where
 }
 
 /// Builds a new service for a full client.
-pub async fn new_full<RuntimeApi, Executor>(
+pub async fn new_full<RuntimeApi, Executor, N>(
     mut config: Configuration,
     eth_config: EthConfiguration,
     sealing: Option<Sealing>,
@@ -265,6 +268,7 @@ where
     RuntimeApi: Send + Sync + 'static,
     RuntimeApi::RuntimeApi: RuntimeApiCollection,
     Executor: NativeExecutionDispatch + 'static,
+    N: sc_network::NetworkBackend<Block, <Block as BlockT>::Hash>,
 {
     let build_import_queue = if sealing.is_some() {
         build_manual_seal_import_queue::<RuntimeApi, Executor>
@@ -280,7 +284,7 @@ where
         keystore_container,
         select_chain,
         transaction_pool,
-        other: (mut telemetry, block_import, grandpa_link, frontier_backend, overrides),
+        other: (mut telemetry, block_import, grandpa_link, frontier_backend, storage_override),
     } = new_partial(&config, &eth_config, build_import_queue)?;
 
     let FrontierPartialComponents {
@@ -289,13 +293,24 @@ where
         fee_history_cache_limit,
     } = new_frontier_partial(&eth_config)?;
 
-    let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
+    let mut net_config =
+        sc_network::config::FullNetworkConfiguration::<_, _, N>::new(&config.network);
+    let peer_store_handle = net_config.peer_store_handle();
+    let metrics = N::register_notification_metrics(
+        config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+    );
+
     let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
         &client.block_hash(0)?.expect("Genesis block exists; qed"),
         &config.chain_spec,
     );
+
     let (grandpa_protocol_config, grandpa_notification_service) =
-        sc_consensus_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone());
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
+            grandpa_protocol_name.clone(),
+            metrics.clone(),
+            peer_store_handle,
+        );
 
     let warp_sync_params = if sealing.is_some() {
         None
@@ -321,6 +336,7 @@ where
             block_announce_validator_builder: None,
             warp_sync_params,
             block_relay: None,
+            metrics,
         })?;
 
     if config.offchain_worker.enabled {
@@ -335,7 +351,7 @@ where
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
                 )),
-                network_provider: network.clone(),
+                network_provider: Arc::new(network.clone()),
                 enable_http_requests: true,
                 custom_extensions: |_| vec![],
             })
@@ -347,6 +363,7 @@ where
     let role = config.role.clone();
     let force_authoring = config.force_authoring;
     let name = config.network.node_name.clone();
+    let frontier_backend = Arc::new(frontier_backend);
     let enable_grandpa = !config.disable_grandpa && sealing.is_none();
     let prometheus_registry = config.prometheus_registry().cloned();
 
@@ -379,11 +396,11 @@ where
         let filter_pool = filter_pool.clone();
         let frontier_backend = frontier_backend.clone();
         let pubsub_notification_sinks = pubsub_notification_sinks.clone();
-        let overrides = overrides.clone();
+        let storage_override = storage_override.clone();
         let fee_history_cache = fee_history_cache.clone();
         let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
             task_manager.spawn_handle(),
-            overrides.clone(),
+            storage_override.clone(),
             eth_config.eth_log_block_cache,
             eth_config.eth_statuses_cache,
             prometheus_registry.clone(),
@@ -393,8 +410,11 @@ where
         let target_gas_price = eth_config.target_gas_price;
         let pending_create_inherent_data_providers = move |_, ()| async move {
             let current = sp_timestamp::InherentDataProvider::from_system_time();
-            let next_slot =
-                current.timestamp().as_millis().saturating_add(slot_duration.as_millis());
+            let next_slot = current
+                .timestamp()
+                .as_millis()
+                .checked_add(slot_duration.as_millis())
+                .expect("Overflow when calculating next slot");
             let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
             let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 				*timestamp,
@@ -414,11 +434,11 @@ where
                 enable_dev_signer,
                 network: network.clone(),
                 sync: sync_service.clone(),
-                frontier_backend: match frontier_backend.clone() {
-                    fc_db::Backend::KeyValue(b) => Arc::new(b),
-                    fc_db::Backend::Sql(b) => Arc::new(b),
+                frontier_backend: match &*frontier_backend {
+                    fc_db::Backend::KeyValue(b) => b.clone(),
+                    fc_db::Backend::Sql(b) => b.clone(),
                 },
-                overrides: overrides.clone(),
+                storage_override: storage_override.clone(),
                 block_data_cache: block_data_cache.clone(),
                 filter_pool: filter_pool.clone(),
                 max_past_logs,
@@ -469,7 +489,7 @@ where
         backend,
         frontier_backend,
         filter_pool,
-        overrides,
+        storage_override,
         fee_history_cache,
         fee_history_cache_limit,
         sync_service.clone(),
@@ -494,6 +514,7 @@ where
             )?;
 
             network_starter.start_network();
+            log::info!("Manual Seal Ready");
             return Ok(task_manager);
         }
 
@@ -634,9 +655,11 @@ where
             inherent_data: &mut sp_inherents::InherentData,
         ) -> Result<(), sp_inherents::Error> {
             TIMESTAMP.with(|x| {
-                let mut timestamp = x.borrow_mut();
-                *timestamp = timestamp.saturating_add(node_subspace_runtime::SLOT_DURATION);
-                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*timestamp)
+                *x.borrow_mut() = x
+                    .borrow()
+                    .checked_add(node_subspace_runtime::SLOT_DURATION)
+                    .expect("Overflow when adding slot duration");
+                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
             })
         }
 
@@ -695,9 +718,11 @@ pub async fn build_full(
     eth_config: EthConfiguration,
     sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError> {
-    new_full::<node_subspace_runtime::RuntimeApi, TemplateRuntimeExecutor>(
-        config, eth_config, sealing,
-    )
+    new_full::<
+        node_subspace_runtime::RuntimeApi,
+        TemplateRuntimeExecutor,
+        sc_network::NetworkWorker<_, _>,
+    >(config, eth_config, sealing)
     .await
 }
 
@@ -710,7 +735,7 @@ pub fn new_chain_ops(
         Arc<FullBackend>,
         BasicQueue<Block>,
         TaskManager,
-        FrontierBackend,
+        FrontierBackend<Client>,
     ),
     ServiceError,
 > {
