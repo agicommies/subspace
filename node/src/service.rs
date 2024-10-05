@@ -3,16 +3,13 @@
 use std::{cell::RefCell, path::Path, sync::Arc, time::Duration};
 
 use futures::{channel::mpsc, prelude::*};
-// Substrate
 use prometheus_endpoint::Registry;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::BasicQueue;
-use sc_executor::NativeExecutionDispatch;
 use sc_network_sync::strategy::warp::{WarpSyncParams, WarpSyncProvider};
 use sc_service::{error::Error as ServiceError, Configuration, PartialComponents, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sp_api::ConstructRuntimeApi;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_core::U256;
 use sp_runtime::traits::Block as BlockT;
@@ -20,18 +17,14 @@ use sp_runtime::traits::Block as BlockT;
 // Runtime
 use node_subspace_runtime::{opaque::Block, Hash, TransactionConverter};
 
+pub use crate::eth::{db_config_dir, EthConfiguration};
 use crate::{
     cli::Sealing,
-    client::{BaseRuntimeApiCollection, FullBackend, FullClient, RuntimeApiCollection},
+    client::{FullBackend, WasmClient},
     eth::{
-        new_frontier_partial, spawn_frontier_tasks, BackendType, EthCompatRuntimeApiCollection,
-        FrontierBackend, FrontierBlockImport, FrontierPartialComponents, StorageOverride,
-        StorageOverrideHandler,
+        new_frontier_partial, spawn_frontier_tasks, BackendType, FrontierBackend,
+        FrontierPartialComponents, StorageOverride, StorageOverrideHandler,
     },
-};
-pub use crate::{
-    client::{Client, TemplateRuntimeExecutor},
-    eth::{db_config_dir, EthConfiguration},
 };
 
 type BasicImportQueue = sc_consensus::DefaultImportQueue<Block>;
@@ -47,39 +40,35 @@ type BoxBlockImport = sc_consensus::BoxBlockImport<Block>;
 /// imported and generated.
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 512;
 
-pub fn new_partial<RuntimeApi, Executor, BIQ>(
+pub fn new_partial<BIQ>(
     config: &Configuration,
     eth_config: &EthConfiguration,
     build_import_queue: BIQ,
 ) -> Result<
     PartialComponents<
-        FullClient<RuntimeApi, Executor>,
+        WasmClient,
         FullBackend,
         FullSelectChain,
         BasicImportQueue,
-        FullPool<FullClient<RuntimeApi, Executor>>,
+        FullPool<WasmClient>,
         (
             Option<Telemetry>,
             BoxBlockImport,
-            GrandpaLinkHalf<FullClient<RuntimeApi, Executor>>,
-            FrontierBackend<FullClient<RuntimeApi, Executor>>,
+            GrandpaLinkHalf<WasmClient>,
+            FrontierBackend<WasmClient>,
             Arc<dyn StorageOverride<Block>>,
         ),
     >,
     ServiceError,
 >
 where
-    RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-    RuntimeApi: Send + Sync + 'static,
-    RuntimeApi::RuntimeApi: BaseRuntimeApiCollection + EthCompatRuntimeApiCollection,
-    Executor: NativeExecutionDispatch + 'static,
     BIQ: FnOnce(
-        Arc<FullClient<RuntimeApi, Executor>>,
+        Arc<WasmClient>,
         &Configuration,
         &EthConfiguration,
         &TaskManager,
         Option<TelemetryHandle>,
-        GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
+        GrandpaBlockImport<WasmClient>,
     ) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>,
 {
     let telemetry = config
@@ -93,10 +82,10 @@ where
         })
         .transpose()?;
 
-    let executor = sc_service::new_native_or_wasm_executor(config);
+    let executor = sc_service::new_wasm_executor(config);
 
     let (client, backend, keystore_container, task_manager) =
-        sc_service::new_full_parts::<Block, RuntimeApi, _>(
+        sc_service::new_full_parts::<Block, _, _>(
             config,
             telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
             executor,
@@ -183,23 +172,14 @@ where
 }
 
 /// Build the import queue for the template runtime (aura + grandpa).
-pub fn build_aura_grandpa_import_queue<RuntimeApi, Executor>(
-    client: Arc<FullClient<RuntimeApi, Executor>>,
+pub fn build_aura_grandpa_import_queue(
+    client: Arc<WasmClient>,
     config: &Configuration,
     eth_config: &EthConfiguration,
     task_manager: &TaskManager,
     telemetry: Option<TelemetryHandle>,
-    grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>
-where
-    RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-    RuntimeApi: Send + Sync + 'static,
-    RuntimeApi::RuntimeApi: RuntimeApiCollection,
-    Executor: NativeExecutionDispatch + 'static,
-{
-    let frontier_block_import =
-        FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
-
+    grandpa_block_import: GrandpaBlockImport<WasmClient>,
+) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError> {
     let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
     let target_gas_price = eth_config.target_gas_price;
     let create_inherent_data_providers = move |_, ()| async move {
@@ -215,8 +195,8 @@ where
 
     let import_queue = sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _>(
         sc_consensus_aura::ImportQueueParams {
-            block_import: frontier_block_import.clone(),
-            justification_import: Some(Box::new(grandpa_block_import)),
+            block_import: grandpa_block_import.clone(),
+            justification_import: Some(Box::new(grandpa_block_import.clone())),
             client,
             create_inherent_data_providers,
             spawner: &task_manager.spawn_essential_handle(),
@@ -228,52 +208,41 @@ where
     )
     .map_err::<ServiceError, _>(Into::into)?;
 
-    Ok((import_queue, Box::new(frontier_block_import)))
+    Ok((import_queue, Box::new(grandpa_block_import)))
 }
 
 /// Build the import queue for the template runtime (manual seal).
-pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
-    client: Arc<FullClient<RuntimeApi, Executor>>,
+pub fn build_manual_seal_import_queue(
+    client: Arc<WasmClient>,
     config: &Configuration,
     _eth_config: &EthConfiguration,
     task_manager: &TaskManager,
     _telemetry: Option<TelemetryHandle>,
-    _grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>
-where
-    RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-    RuntimeApi: Send + Sync + 'static,
-    RuntimeApi::RuntimeApi: RuntimeApiCollection,
-    Executor: NativeExecutionDispatch + 'static,
-{
-    let frontier_block_import = FrontierBlockImport::new(client.clone(), client);
+    _grandpa_block_import: GrandpaBlockImport<WasmClient>,
+) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError> {
     Ok((
         sc_consensus_manual_seal::import_queue(
-            Box::new(frontier_block_import.clone()),
+            Box::new(client.clone()),
             &task_manager.spawn_essential_handle(),
             config.prometheus_registry(),
         ),
-        Box::new(frontier_block_import),
+        Box::new(client),
     ))
 }
 
 /// Builds a new service for a full client.
-pub async fn new_full<RuntimeApi, Executor, N>(
+pub async fn new_full<N>(
     mut config: Configuration,
     eth_config: EthConfiguration,
     sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError>
 where
-    RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-    RuntimeApi: Send + Sync + 'static,
-    RuntimeApi::RuntimeApi: RuntimeApiCollection,
-    Executor: NativeExecutionDispatch + 'static,
     N: sc_network::NetworkBackend<Block, <Block as BlockT>::Hash>,
 {
     let build_import_queue = if sealing.is_some() {
-        build_manual_seal_import_queue::<RuntimeApi, Executor>
+        build_manual_seal_import_queue
     } else {
-        build_aura_grandpa_import_queue::<RuntimeApi, Executor>
+        build_aura_grandpa_import_queue
     };
 
     let PartialComponents {
@@ -616,24 +585,18 @@ where
     Ok(task_manager)
 }
 
-fn run_manual_seal_authorship<RuntimeApi, Executor>(
+fn run_manual_seal_authorship(
     eth_config: &EthConfiguration,
     sealing: Sealing,
-    client: Arc<FullClient<RuntimeApi, Executor>>,
-    transaction_pool: Arc<FullPool<FullClient<RuntimeApi, Executor>>>,
+    client: Arc<WasmClient>,
+    transaction_pool: Arc<FullPool<WasmClient>>,
     select_chain: FullSelectChain,
     block_import: BoxBlockImport,
     task_manager: &TaskManager,
     prometheus_registry: Option<&Registry>,
     telemetry: Option<&Telemetry>,
     commands_stream: mpsc::Receiver<sc_consensus_manual_seal::rpc::EngineCommand<Hash>>,
-) -> Result<(), ServiceError>
-where
-    RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-    RuntimeApi: Send + Sync + 'static,
-    RuntimeApi::RuntimeApi: RuntimeApiCollection,
-    Executor: NativeExecutionDispatch + 'static,
-{
+) -> Result<(), ServiceError> {
     let proposer_factory = sc_basic_authorship::ProposerFactory::new(
         task_manager.spawn_handle(),
         client.clone(),
@@ -718,12 +681,7 @@ pub async fn build_full(
     eth_config: EthConfiguration,
     sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError> {
-    new_full::<
-        node_subspace_runtime::RuntimeApi,
-        TemplateRuntimeExecutor,
-        sc_network::NetworkWorker<_, _>,
-    >(config, eth_config, sealing)
-    .await
+    new_full::<sc_network::NetworkWorker<_, _>>(config, eth_config, sealing).await
 }
 
 pub fn new_chain_ops(
@@ -731,11 +689,11 @@ pub fn new_chain_ops(
     eth_config: &EthConfiguration,
 ) -> Result<
     (
-        Arc<Client>,
+        Arc<WasmClient>,
         Arc<FullBackend>,
         BasicQueue<Block>,
         TaskManager,
-        FrontierBackend<Client>,
+        FrontierBackend<WasmClient>,
     ),
     ServiceError,
 > {
@@ -747,10 +705,6 @@ pub fn new_chain_ops(
         task_manager,
         other,
         ..
-    } = new_partial::<node_subspace_runtime::RuntimeApi, TemplateRuntimeExecutor, _>(
-        config,
-        eth_config,
-        build_aura_grandpa_import_queue,
-    )?;
+    } = new_partial(config, eth_config, build_aura_grandpa_import_queue)?;
     Ok((client, backend, import_queue, task_manager, other.3))
 }
