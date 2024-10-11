@@ -68,14 +68,14 @@ parity-scale-codec = { version = "3.6.5", features = [
 ], default-features = false }
 
 # Frontier dependencies
-fp-account = { git = "https://github.com/paritytech/frontier", default-features = false, features = [
+fp-account = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false, features = [
     "serde",
 ] }
-fp-rpc = { git = "https://github.com/paritytech/frontier", default-features = false }
-fp-self-contained = { git = "https://github.com/paritytech/frontier", default-features = false, features = [
+fp-rpc = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
+fp-self-contained = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false, features = [
     "serde",
 ] }
-pallet-base-fee = { git = "https://github.com/paritytech/frontier", default-features = false }
+pallet-base-fee = { git = "https://github.com/paritytech/frontier", branch = "polkadot-v1.10.1", default-features = false }
 
 # Substrate dependencies
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.10.1", default-features = false }
