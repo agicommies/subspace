@@ -17,7 +17,7 @@ use sp_runtime::{generic::Era, OpaqueExtrinsic, SaturatedConversion};
 use node_subspace_runtime::{self as runtime, AccountId, Balance, BalancesCall, SystemCall};
 use sp_runtime::MultiAddress;
 
-use crate::client::Client;
+use crate::client::WasmClient as Client;
 
 /// Generates extrinsics for the `benchmark overhead` command.
 ///
