@@ -42,7 +42,7 @@ pub mod pallet {
     use pallet_subspace::TotalStake;
     use subnet_pricing::root::RootPricing;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]

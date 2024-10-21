@@ -4,8 +4,7 @@ use frame_support::{
     traits::{ConstU32, Get, StorageVersion},
 };
 
-pub mod v2 {
-    use dao::CuratorApplication;
+pub mod v4 {
     use frame_support::{traits::OnRuntimeUpgrade, weights::Weight};
 
     use super::*;
@@ -37,40 +36,21 @@ pub mod v2 {
             StorageMap<Pallet<T>, Identity, AccountIdOf<T>, u8, ValueQuery>;
     }
 
-    pub struct MigrateToV2<T>(sp_std::marker::PhantomData<T>);
+    pub struct MigrateToV4<T>(sp_std::marker::PhantomData<T>);
 
-    impl<T: Config> OnRuntimeUpgrade for MigrateToV2<T> {
+    impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
             let on_chain_version = StorageVersion::get::<Pallet<T>>();
-            if on_chain_version != 1 {
+            if on_chain_version != 3 {
                 log::info!("Storage v2 already updated");
                 return Weight::zero();
             }
 
-            StorageVersion::new(2).put::<Pallet<T>>();
+            StorageVersion::new(4).put::<Pallet<T>>();
 
-            CuratorApplications::<T>::translate(
-                |_key, old_value: v2::old_storage::CuratorApplication<T>| {
-                    Some(CuratorApplication {
-                        id: old_value.id,
-                        user_id: old_value.user_id,
-                        paying_for: old_value.paying_for,
-                        data: old_value.data,
-                        status: old_value.status,
-                        application_cost: old_value.application_cost,
-                        block_number: 0,
-                    })
-                },
-            );
+            let _ = Proposals::<T>::clear(u32::MAX, None);
 
-            let old_whitelist: Vec<_> = old_storage::LegitWhitelist::<T>::iter().collect();
-            _ = old_storage::LegitWhitelist::<T>::clear(u32::MAX, None);
-
-            for (account, _) in old_whitelist {
-                LegitWhitelist::<T>::insert(account, ());
-            }
-
-            log::info!("Migrated to v2");
+            log::info!("Migrated to v4");
 
             T::DbWeight::get().reads_writes(2, 2)
         }
