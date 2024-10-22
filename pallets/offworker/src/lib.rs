@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 
 use frame_support::{pallet_macros::import_section, sp_runtime::DispatchError, traits::Get};
 use frame_system::{
@@ -71,6 +71,7 @@ pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"btc!");
 /// the types with this pallet-specific identifier.
 pub mod crypto {
     use super::KEY_TYPE;
+    use alloc::string::String;
     use sp_core::sr25519::Signature as Sr25519Signature;
     use sp_runtime::{
         app_crypto::{app_crypto, sr25519},
