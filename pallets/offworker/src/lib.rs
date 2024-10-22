@@ -1,10 +1,9 @@
-// TODO:
-// make sure that not only yuma subnets work
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
+
 use frame_support::{pallet_macros::import_section, sp_runtime::DispatchError, traits::Get};
 use frame_system::{
     self as system,
