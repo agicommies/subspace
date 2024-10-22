@@ -26,19 +26,19 @@ ENV PATH=/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbi
 RUN curl https://sh.rustup.rs -sSf | \
     sh -s -- -y --profile=minimal --default-toolchain=nightly-2024-02-01
 
-RUN if [ -n "$AWS_ACCESS_KEY_ID" ]; then \
-        curl https://github.com/mozilla/sccache/releases/download/v0.7.7/sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz \
-            -Lo sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz && \
-        tar -xzf sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz --strip-components=1 \
-            sccache-v0.7.7-x86_64-unknown-linux-musl/sccache && \
-        ./sccache --start-server && \
-        export RUSTC_WRAPPER="/app/sccache"; \
-    fi && \
-    cargo build -p node-subspace --release --locked
+# RUN if [ -n "$AWS_ACCESS_KEY_ID" ]; then \
+#         curl https://github.com/mozilla/sccache/releases/download/v0.7.7/sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz \
+#             -Lo sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz && \
+#         tar -xzf sccache-v0.7.7-x86_64-unknown-linux-musl.tar.gz --strip-components=1 \
+#             sccache-v0.7.7-x86_64-unknown-linux-musl/sccache && \
+#         ./sccache --start-server && \
+#         export RUSTC_WRAPPER="/app/sccache"; \
+#     fi && \
+RUN cargo build -p node-subspace --release --locked
 
-RUN if [ -n "$AWS_ACCESS_KEY_ID" ]; then \
-        ./sccache --show-stats; \
-    fi
+# RUN if [ -n "$AWS_ACCESS_KEY_ID" ]; then \
+#         ./sccache --show-stats; \
+#     fi
 
 FROM debian:12-slim
 
