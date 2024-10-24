@@ -5,11 +5,13 @@ use std::{
     time::Duration,
 };
 
+pub use fc_consensus::FrontierBlockImport;
 use futures::{future, prelude::*};
 // Substrate
 use sc_client_api::BlockchainEvents;
 use sc_network_sync::SyncingService;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sp_api::ConstructRuntimeApi;
 // Frontier
 use fc_rpc::EthTask;
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
@@ -105,11 +107,26 @@ pub fn new_frontier_partial(
     })
 }
 
-pub async fn spawn_frontier_tasks(
+/// A set of APIs that ethereum-compatible runtimes must implement.
+pub trait EthCompatRuntimeApiCollection:
+    sp_api::ApiExt<Block>
+    + fp_rpc::ConvertTransactionRuntimeApi<Block>
+    + fp_rpc::EthereumRuntimeRPCApi<Block>
+{
+}
+
+impl<Api> EthCompatRuntimeApiCollection for Api where
+    Api: sp_api::ApiExt<Block>
+        + fp_rpc::ConvertTransactionRuntimeApi<Block>
+        + fp_rpc::EthereumRuntimeRPCApi<Block>
+{
+}
+
+pub async fn spawn_frontier_tasks<RuntimeApi>(
     task_manager: &TaskManager,
-    client: Arc<WasmClient>,
+    client: Arc<WasmClient<RuntimeApi>>,
     backend: Arc<FullBackend>,
-    frontier_backend: Arc<FrontierBackend<WasmClient>>,
+    frontier_backend: Arc<FrontierBackend<WasmClient<RuntimeApi>>>,
     filter_pool: Option<FilterPool>,
     storage_override: Arc<dyn StorageOverride<Block>>,
     fee_history_cache: FeeHistoryCache,
@@ -120,7 +137,10 @@ pub async fn spawn_frontier_tasks(
             fc_mapping_sync::EthereumBlockNotification<Block>,
         >,
     >,
-) {
+) where
+    RuntimeApi: ConstructRuntimeApi<Block, WasmClient<RuntimeApi>> + Send + Sync + 'static,
+    RuntimeApi::RuntimeApi: EthCompatRuntimeApiCollection,
+{
     // Spawn main mapping sync worker background task.
     match &*frontier_backend {
         fc_db::Backend::KeyValue(b) => {
