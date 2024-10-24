@@ -5,7 +5,6 @@ use std::{
     time::Duration,
 };
 
-pub use fc_consensus::FrontierBlockImport;
 use futures::{future, prelude::*};
 // Substrate
 use sc_client_api::BlockchainEvents;

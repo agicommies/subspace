@@ -23,9 +23,7 @@ use sp_runtime::traits::Block as BlockT;
 
 use node_subspace_runtime::{opaque::Block, Hash, TransactionConverter};
 
-pub use crate::eth::{
-    db_config_dir, EthCompatRuntimeApiCollection, EthConfiguration, FrontierBlockImport,
-};
+pub use crate::eth::{db_config_dir, EthCompatRuntimeApiCollection, EthConfiguration};
 use crate::{
     cli::Sealing,
     client::{BaseRuntimeApiCollection, Client, FullBackend, RuntimeApiCollection, WasmClient},
@@ -196,9 +194,6 @@ where
     RuntimeApi: Send + Sync + 'static,
     RuntimeApi::RuntimeApi: RuntimeApiCollection,
 {
-    let frontier_block_import =
-        FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
-
     let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
     let target_gas_price = eth_config.target_gas_price;
     let create_inherent_data_providers = move |_, ()| async move {
@@ -214,8 +209,8 @@ where
 
     let import_queue = sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _>(
         sc_consensus_aura::ImportQueueParams {
-            block_import: frontier_block_import.clone(),
-            justification_import: Some(Box::new(grandpa_block_import)),
+            block_import: grandpa_block_import.clone(),
+            justification_import: Some(Box::new(grandpa_block_import.clone())),
             client,
             create_inherent_data_providers,
             spawner: &task_manager.spawn_essential_handle(),
@@ -227,7 +222,7 @@ where
     )
     .map_err::<ServiceError, _>(Into::into)?;
 
-    Ok((import_queue, Box::new(frontier_block_import)))
+    Ok((import_queue, Box::new(grandpa_block_import)))
 }
 
 /// Build the import queue for the template runtime (manual seal).
@@ -244,14 +239,13 @@ where
     RuntimeApi: Send + Sync + 'static,
     RuntimeApi::RuntimeApi: RuntimeApiCollection,
 {
-    let frontier_block_import = FrontierBlockImport::new(client.clone(), client);
     Ok((
         sc_consensus_manual_seal::import_queue(
-            Box::new(frontier_block_import.clone()),
+            Box::new(client.clone()),
             &task_manager.spawn_essential_handle(),
             config.prometheus_registry(),
         ),
-        Box::new(frontier_block_import),
+        Box::new(client),
     ))
 }
 
