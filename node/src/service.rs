@@ -1,5 +1,4 @@
 use sp_api::ConstructRuntimeApi;
-///! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 use std::{
     cell::RefCell,
     io::{Cursor, Read},
@@ -645,7 +644,10 @@ where
             inherent_data: &mut sp_inherents::InherentData,
         ) -> Result<(), sp_inherents::Error> {
             TIMESTAMP.with(|x| {
-                *x.borrow_mut() += node_subspace_runtime::SLOT_DURATION;
+                *x.borrow_mut() = x
+                    .borrow()
+                    .checked_add(node_subspace_runtime::SLOT_DURATION)
+                    .expect("Overflow when adding slot duration");
                 inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
             })
         }
