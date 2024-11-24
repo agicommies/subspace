@@ -34,6 +34,7 @@ pub struct FullDeps<C, P, A: ChainApi, CT, CIDP> {
     /// Manual seal command sink
     pub command_sink: Option<mpsc::Sender<EngineCommand<Hash>>>,
     /// Ethereum-compatibility specific dependencies.
+    #[cfg(feature = "testnet")]
     pub eth: EthDeps<Block, C, P, A, CT, CIDP>,
 }
 
@@ -86,6 +87,7 @@ where
         client,
         pool,
         command_sink,
+        #[cfg(feature = "testnet")]
         eth,
     } = deps;
 

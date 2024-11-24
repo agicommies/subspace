@@ -17,6 +17,7 @@ use super::{BoxBlockImport, EthConfiguration, FullPool, FullSelectChain};
 
 pub struct ManualSealComponents {
     pub sealing: Sealing,
+    #[cfg(feature = "testnet")]
     pub eth_config: EthConfiguration,
     pub client: Arc<Client>,
     pub transaction_pool: Arc<FullPool>,
@@ -29,6 +30,7 @@ pub struct ManualSealComponents {
 }
 
 pub fn run_manual_seal_authorship(components: ManualSealComponents) -> Result<(), Error> {
+    #[cfg(feature = "testnet")]
     let target_gas_price = components.eth_config.target_gas_price;
     let create_inherent_data_providers = move |_, ()| async move {
         let timestamp = MockTimestampInherentDataProvider;
@@ -99,6 +101,7 @@ fn localnet_seal(
         .boxed(),
     );
 
+    #[cfg(feature = "testnet")]
     let target_gas_price = components.eth_config.target_gas_price;
     let create_inherent_data_providers = {
         let client = components.client.clone();

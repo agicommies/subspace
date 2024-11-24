@@ -293,7 +293,9 @@ pub fn run() -> sc_cli::Result<()> {
                     client,
                     other:
                         Other {
-                            frontier_backend, ..
+                            #[cfg(feature = "testnet")]
+                            frontier_backend,
+                            ..
                         },
                     ..
                 } = service::new_chain_ops(
@@ -302,6 +304,7 @@ pub fn run() -> sc_cli::Result<()> {
                     cli.eth,
                 )?;
 
+                #[cfg(feature = "testnet")]
                 let frontier_backend = match frontier_backend {
                     fc_db::Backend::KeyValue(kv) => kv,
                     _ => panic!("Only fc_db::Backend::KeyValue supported"),

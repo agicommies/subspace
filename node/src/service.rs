@@ -46,7 +46,9 @@ pub struct Other {
     pub telemetry: Option<Telemetry>,
     pub block_import: BoxBlockImport,
     pub grandpa_link: GrandpaLinkHalf,
+    #[cfg(feature = "testnet")]
     pub frontier_backend: FrontierBackend,
+    #[cfg(feature = "testnet")]
     pub storage_override: Arc<dyn StorageOverride<Block>>,
 }
 
@@ -109,8 +111,6 @@ where
     let (import_queue, block_import) = build_import_queue(
         client.clone(),
         &config,
-        #[cfg(feature = "testnet")]
-        &eth_config,
         &task_manager,
         telemetry.as_ref().map(|x| x.handle()),
         grandpa_block_import,
@@ -134,13 +134,9 @@ where
         transaction_pool,
         other: Other {
             config,
-            #[cfg(feature = "testnet")]
-            eth_config,
             telemetry,
             block_import,
             grandpa_link,
-            frontier_backend,
-            storage_override,
         },
     })
 }
@@ -449,6 +445,7 @@ where
     let role = other.config.role;
     let force_authoring = other.config.force_authoring;
     let name = other.config.network.node_name.clone();
+    #[cfg(feature = "testnet")]
     let frontier_backend = Arc::new(other.frontier_backend);
     let enable_grandpa = !other.config.disable_grandpa && sealing.is_none();
     let prometheus_registry = other.config.prometheus_registry().cloned();
@@ -472,23 +469,33 @@ where
         let sync_service = sync_service.clone();
 
         let is_authority = role.is_authority();
+        #[cfg(feature = "testnet")]
+        #[cfg(feature = "testnet")]
         let enable_dev_signer = other.eth_config.enable_dev_signer;
+        #[cfg(feature = "testnet")]
         let max_past_logs = other.eth_config.max_past_logs;
         let execute_gas_limit_multiplier = other.eth_config.execute_gas_limit_multiplier;
+        #[cfg(feature = "testnet")]
         let filter_pool = filter_pool.clone();
         let frontier_backend = frontier_backend.clone();
         let pubsub_notification_sinks = pubsub_notification_sinks.clone();
+        #[cfg(feature = "testnet")]
         let storage_override = other.storage_override.clone();
+        #[cfg(feature = "testnet")]
         let fee_history_cache = fee_history_cache.clone();
         let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
             task_manager.spawn_handle(),
+            #[cfg(feature = "testnet")]
             storage_override.clone(),
+            #[cfg(feature = "testnet")]
             other.eth_config.eth_log_block_cache,
+            #[cfg(feature = "testnet")]
             other.eth_config.eth_statuses_cache,
             prometheus_registry.clone(),
         ));
 
         let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+        #[cfg(feature = "testnet")]
         let target_gas_price = other.eth_config.target_gas_price;
         let pending_create_inherent_data_providers = move |_, ()| async move {
             let current = sp_timestamp::InherentDataProvider::from_system_time();
@@ -508,6 +515,7 @@ where
 
         let command_sink = command_sink.clone();
         Box::new(move |subscription_task_executor| {
+            #[cfg(feature = "testnet")]
             let eth_deps = crate::rpc::EthDeps {
                 client: client.clone(),
                 pool: pool.clone(),
@@ -540,6 +548,7 @@ where
                 } else {
                     None
                 },
+                #[cfg(feature = "testnet")]
                 eth: eth_deps,
             };
 
@@ -595,6 +604,7 @@ where
         if let Some(sealing) = sealing {
             let components = manual_seal::ManualSealComponents {
                 sealing,
+                #[cfg(feature = "testnet")]
                 eth_config: other.eth_config,
                 client,
                 transaction_pool,
@@ -623,7 +633,10 @@ where
         );
 
         let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+
+        #[cfg(feature = "testnet")]
         let target_gas_price = other.eth_config.target_gas_price;
+
         let create_inherent_data_providers = move |_, ()| async move {
             let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
             let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
