@@ -102,6 +102,7 @@ where
     }
 
     // Ethereum compatibility RPCs
+    #[cfg(feature = "testnet")]
     let io = create_eth::<_, _, _, _, _, _, _, DefaultEthConfig<C, BE>>(
         io,
         eth,

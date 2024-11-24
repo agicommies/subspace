@@ -85,7 +85,11 @@ pub fn run() -> sc_cli::Result<()> {
                     import_queue,
                     task_manager,
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 Ok((cmd.run(client, import_queue), task_manager))
             })
@@ -98,7 +102,11 @@ pub fn run() -> sc_cli::Result<()> {
                     task_manager,
                     other: Other { config, .. },
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 Ok((cmd.run(client, config.database), task_manager))
             })
@@ -111,7 +119,11 @@ pub fn run() -> sc_cli::Result<()> {
                     task_manager,
                     other: Other { config, .. },
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 Ok((cmd.run(client, config.chain_spec), task_manager))
             })
@@ -124,7 +136,11 @@ pub fn run() -> sc_cli::Result<()> {
                     import_queue,
                     task_manager,
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 Ok((cmd.run(client, import_queue), task_manager))
             })
@@ -134,6 +150,7 @@ pub fn run() -> sc_cli::Result<()> {
             runner.sync_run(|config| {
                 // Remove Frontier offchain db
                 let db_config_dir = db_config_dir(&config);
+                #[cfg(feature = "testnet")]
                 match cli.eth.frontier_backend_type {
                     crate::eth::BackendType::KeyValue => {
                         let frontier_database_config = match config.database {
@@ -154,6 +171,7 @@ pub fn run() -> sc_cli::Result<()> {
                         };
                         cmd.run(frontier_database_config)?;
                     }
+                    #[cfg(feature = "testnet")]
                     crate::eth::BackendType::Sql => {
                         let db_path = db_config_dir.join("sql");
                         match std::fs::remove_dir_all(&db_path) {
@@ -184,7 +202,11 @@ pub fn run() -> sc_cli::Result<()> {
                     backend,
                     task_manager,
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 let aux_revert = Box::new(move |client, _, blocks| {
                     sc_consensus_grandpa::revert(client, blocks)?;
@@ -274,7 +296,11 @@ pub fn run() -> sc_cli::Result<()> {
                             frontier_backend, ..
                         },
                     ..
-                } = service::new_chain_ops(config, cli.eth)?;
+                } = service::new_chain_ops(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                )?;
 
                 let frontier_backend = match frontier_backend {
                     fc_db::Backend::KeyValue(kv) => kv,
@@ -286,9 +312,15 @@ pub fn run() -> sc_cli::Result<()> {
         _ => {
             let runner = cli.create_runner(&cli.run)?;
             runner.run_node_until_exit(|config| async move {
-                service::build_full(config, cli.eth, cli.sealing, cli.rsa_path)
-                    .map_err(Into::into)
-                    .await
+                service::build_full(
+                    config,
+                    #[cfg(feature = "testnet")]
+                    cli.eth,
+                    cli.sealing,
+                    cli.rsa_path,
+                )
+                .map_err(Into::into)
+                .await
             })
         }
     }

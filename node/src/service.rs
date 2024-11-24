@@ -19,13 +19,13 @@ use std::{
 use crate::{
     cli::Sealing,
     client::{Client, FullBackend},
-    eth::{
-        new_frontier_partial, spawn_frontier_tasks, BackendType, FrontierBackend,
-        FrontierPartialComponents, StorageOverride, StorageOverrideHandler,
-    },
 };
 
-pub use crate::eth::{db_config_dir, EthConfiguration};
+#[cfg(feature = "testnet")]
+pub use crate::eth::{
+    db_config_dir, new_frontier_partial, spawn_frontier_tasks, BackendType, EthConfiguration,
+    FrontierBackend, FrontierPartialComponents, StorageOverride, StorageOverrideHandler,
+};
 
 mod decrypter;
 mod manual_seal;
@@ -41,6 +41,7 @@ type BoxBlockImport = sc_consensus::BoxBlockImport<Block>;
 
 pub struct Other {
     pub config: Configuration,
+    #[cfg(feature = "testnet")]
     pub eth_config: EthConfiguration,
     pub telemetry: Option<Telemetry>,
     pub block_import: BoxBlockImport,
@@ -56,6 +57,95 @@ type Components =
 /// imported and generated.
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 512;
 
+#[cfg(not(feature = "testnet"))]
+pub fn new_partial<BIQ>(
+    config: Configuration,
+    build_import_queue: BIQ,
+) -> Result<Components, ServiceError>
+where
+    BIQ: FnOnce(
+        Arc<Client>,
+        &Configuration,
+        &TaskManager,
+        Option<TelemetryHandle>,
+        GrandpaBlockImport,
+    ) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>,
+{
+    let telemetry = config
+        .telemetry_endpoints
+        .clone()
+        .filter(|x| !x.is_empty())
+        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
+            let worker = TelemetryWorker::new(16)?;
+            let telemetry = worker.handle().new_telemetry(endpoints);
+            Ok((worker, telemetry))
+        })
+        .transpose()?;
+
+    let executor = sc_service::new_wasm_executor(&config.executor);
+
+    let (client, backend, keystore_container, task_manager) =
+        sc_service::new_full_parts::<Block, RuntimeApi, _>(
+            &config,
+            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+            executor,
+        )?;
+    let client = Arc::new(client);
+
+    let telemetry = telemetry.map(|(worker, telemetry)| {
+        task_manager.spawn_handle().spawn("telemetry", None, worker.run());
+        telemetry
+    });
+
+    let select_chain = sc_consensus::LongestChain::new(backend.clone());
+    let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+        client.clone(),
+        GRANDPA_JUSTIFICATION_PERIOD,
+        &client,
+        select_chain.clone(),
+        telemetry.as_ref().map(|x| x.handle()),
+    )?;
+
+    let (import_queue, block_import) = build_import_queue(
+        client.clone(),
+        &config,
+        #[cfg(feature = "testnet")]
+        &eth_config,
+        &task_manager,
+        telemetry.as_ref().map(|x| x.handle()),
+        grandpa_block_import,
+    )?;
+
+    let transaction_pool = sc_transaction_pool::BasicPool::new_full(
+        config.transaction_pool.clone(),
+        config.role.is_authority().into(),
+        config.prometheus_registry(),
+        task_manager.spawn_essential_handle(),
+        client.clone(),
+    );
+
+    Ok(PartialComponents {
+        client,
+        backend,
+        keystore_container,
+        task_manager,
+        select_chain,
+        import_queue,
+        transaction_pool,
+        other: Other {
+            config,
+            #[cfg(feature = "testnet")]
+            eth_config,
+            telemetry,
+            block_import,
+            grandpa_link,
+            frontier_backend,
+            storage_override,
+        },
+    })
+}
+
+#[cfg(feature = "testnet")]
 pub fn new_partial<BIQ>(
     config: Configuration,
     eth_config: EthConfiguration,
@@ -177,13 +267,21 @@ where
 pub fn build_aura_grandpa_import_queue(
     client: Arc<Client>,
     config: &Configuration,
-    eth_config: &EthConfiguration,
+
+    #[cfg(feature = "testnet")] eth_config: &EthConfiguration,
+
     task_manager: &TaskManager,
     telemetry: Option<TelemetryHandle>,
     grandpa_block_import: GrandpaBlockImport,
 ) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError> {
     let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+
+    #[cfg(feature = "testnet")]
     let target_gas_price = eth_config.target_gas_price;
+
+    #[cfg(not(feature = "testnet"))]
+    let target_gas_price = 0;
+
     let create_inherent_data_providers = move |_, ()| async move {
         let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
         let slot =
@@ -217,7 +315,9 @@ pub fn build_aura_grandpa_import_queue(
 pub fn build_manual_seal_import_queue(
     client: Arc<Client>,
     config: &Configuration,
-    _eth_config: &EthConfiguration,
+
+    #[cfg(feature = "testnet")] _eth_config: &EthConfiguration,
+
     task_manager: &TaskManager,
     _telemetry: Option<TelemetryHandle>,
     _grandpa_block_import: GrandpaBlockImport,
@@ -235,7 +335,9 @@ pub fn build_manual_seal_import_queue(
 /// Builds a new service for a full client.
 pub async fn new_full<N>(
     config: Configuration,
-    eth_config: EthConfiguration,
+
+    #[cfg(feature = "testnet")] eth_config: EthConfiguration,
+
     sealing: Option<Sealing>,
     rsa_key: Option<PathBuf>,
 ) -> Result<TaskManager, ServiceError>
@@ -257,8 +359,14 @@ where
         select_chain,
         transaction_pool,
         mut other,
-    } = new_partial(config, eth_config, build_import_queue)?;
+    } = new_partial(
+        config,
+        #[cfg(feature = "testnet")]
+        eth_config,
+        build_import_queue,
+    )?;
 
+    #[cfg(feature = "testnet")]
     let FrontierPartialComponents {
         filter_pool,
         fee_history_cache,
@@ -328,11 +436,9 @@ where
                 network_provider: Arc::new(network.clone()),
                 enable_http_requests: true,
                 custom_extensions: move |_| {
-                    vec![
-                        Box::new(ow_extensions::OffworkerExt::new(decrypter::Decrypter::new(
-                            rsa_key.clone(),
-                        ))) as Box<_>,
-                    ]
+                    vec![Box::new(ow_extensions::OffworkerExt::new(
+                        decrypter::Decrypter::new(rsa_key.clone()),
+                    ))]
                 },
             })
             .run(client.clone(), task_manager.spawn_handle())
@@ -420,7 +526,7 @@ where
                 filter_pool: filter_pool.clone(),
                 max_past_logs,
                 fee_history_cache: fee_history_cache.clone(),
-                fee_history_cache_limit,
+                vvfee_history_cache_limit,
                 execute_gas_limit_multiplier,
                 forced_parent_hashes: None,
                 pending_create_inherent_data_providers,
@@ -461,6 +567,7 @@ where
         telemetry: other.telemetry.as_mut(),
     })?;
 
+    #[cfg(feature = "testnet")]
     spawn_frontier_tasks(
         &task_manager,
         client.clone(),
@@ -607,17 +714,32 @@ where
 
 pub async fn build_full(
     config: Configuration,
-    eth_config: EthConfiguration,
+
+    #[cfg(feature = "testnet")] eth_config: EthConfiguration,
+
     sealing: Option<Sealing>,
     rsa_key: Option<PathBuf>,
 ) -> Result<TaskManager, ServiceError> {
-    new_full::<sc_network::NetworkWorker<_, _>>(config, eth_config, sealing, rsa_key).await
+    new_full::<sc_network::NetworkWorker<_, _>>(
+        config,
+        #[cfg(feature = "testnet")]
+        eth_config,
+        sealing,
+        rsa_key,
+    )
+    .await
 }
 
 pub fn new_chain_ops(
     mut config: Configuration,
-    eth_config: EthConfiguration,
+
+    #[cfg(feature = "testnet")] eth_config: EthConfiguration,
 ) -> Result<Components, ServiceError> {
     config.keystore = sc_service::config::KeystoreConfig::InMemory;
-    new_partial::<_>(config, eth_config, build_aura_grandpa_import_queue)
+    new_partial::<_>(
+        config,
+        #[cfg(feature = "testnet")]
+        eth_config,
+        build_aura_grandpa_import_queue,
+    )
 }
