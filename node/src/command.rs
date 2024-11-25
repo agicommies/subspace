@@ -3,13 +3,17 @@ use futures::TryFutureExt;
 use sc_cli::SubstrateCli;
 use sc_service::{DatabaseSource, PartialComponents};
 // Frontier
+#[cfg(feature = "testnet")]
 use fc_db::kv::frontier_database_dir;
 
 use crate::{
     chain_spec,
     cli::{Cli, Subcommand},
-    service::{self, db_config_dir, Other},
+    service::{self, Other},
 };
+
+#[cfg(feature = "testnet")]
+use crate::service::db_config_dir;
 
 #[cfg(feature = "runtime-benchmarks")]
 use crate::chain_spec::get_account_id_from_seed;
@@ -149,6 +153,7 @@ pub fn run() -> sc_cli::Result<()> {
             let runner = cli.create_runner(cmd)?;
             runner.sync_run(|config| {
                 // Remove Frontier offchain db
+                #[cfg(feature = "testnet")]
                 let db_config_dir = db_config_dir(&config);
                 #[cfg(feature = "testnet")]
                 match cli.eth.frontier_backend_type {
@@ -286,6 +291,7 @@ pub fn run() -> sc_cli::Result<()> {
         Some(Subcommand::Benchmark) => Err("Benchmarking wasn't enabled when building the node. \
 			You can enable it with `--features runtime-benchmarks`."
             .into()),
+        #[cfg(feature = "testnet")]
         Some(Subcommand::FrontierDb(cmd)) => {
             let runner = cli.create_runner(cmd)?;
             runner.sync_run(|config| {
@@ -293,22 +299,16 @@ pub fn run() -> sc_cli::Result<()> {
                     client,
                     other:
                         Other {
-                            #[cfg(feature = "testnet")]
-                            frontier_backend,
-                            ..
+                            frontier_backend, ..
                         },
                     ..
-                } = service::new_chain_ops(
-                    config,
-                    #[cfg(feature = "testnet")]
-                    cli.eth,
-                )?;
+                } = service::new_chain_ops(config, cli.eth)?;
 
-                #[cfg(feature = "testnet")]
                 let frontier_backend = match frontier_backend {
                     fc_db::Backend::KeyValue(kv) => kv,
                     _ => panic!("Only fc_db::Backend::KeyValue supported"),
                 };
+                #[cfg(feature = "testnet")]
                 cmd.run(client, frontier_backend)
             })
         }

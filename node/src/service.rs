@@ -16,10 +16,15 @@ use std::{
     time::Duration,
 };
 
+use sp_core::H256;
+
 use crate::{
     cli::Sealing,
     client::{Client, FullBackend},
 };
+
+#[cfg(not(feature = "testnet"))]
+use sp_runtime::traits::NumberFor;
 
 #[cfg(feature = "testnet")]
 pub use crate::eth::{
@@ -432,9 +437,11 @@ where
                 network_provider: Arc::new(network.clone()),
                 enable_http_requests: true,
                 custom_extensions: move |_| {
-                    vec![Box::new(ow_extensions::OffworkerExt::new(
-                        decrypter::Decrypter::new(rsa_key.clone()),
-                    ))]
+                    vec![
+                        Box::new(ow_extensions::OffworkerExt::new(decrypter::Decrypter::new(
+                            rsa_key.clone(),
+                        ))) as Box<_>,
+                    ]
                 },
             })
             .run(client.clone(), task_manager.spawn_handle())
@@ -470,26 +477,25 @@ where
 
         let is_authority = role.is_authority();
         #[cfg(feature = "testnet")]
-        #[cfg(feature = "testnet")]
         let enable_dev_signer = other.eth_config.enable_dev_signer;
         #[cfg(feature = "testnet")]
         let max_past_logs = other.eth_config.max_past_logs;
+        #[cfg(feature = "testnet")]
         let execute_gas_limit_multiplier = other.eth_config.execute_gas_limit_multiplier;
         #[cfg(feature = "testnet")]
         let filter_pool = filter_pool.clone();
+        #[cfg(feature = "testnet")]
         let frontier_backend = frontier_backend.clone();
         let pubsub_notification_sinks = pubsub_notification_sinks.clone();
         #[cfg(feature = "testnet")]
         let storage_override = other.storage_override.clone();
         #[cfg(feature = "testnet")]
         let fee_history_cache = fee_history_cache.clone();
+        #[cfg(feature = "testnet")]
         let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
             task_manager.spawn_handle(),
-            #[cfg(feature = "testnet")]
             storage_override.clone(),
-            #[cfg(feature = "testnet")]
             other.eth_config.eth_log_block_cache,
-            #[cfg(feature = "testnet")]
             other.eth_config.eth_statuses_cache,
             prometheus_registry.clone(),
         ));
@@ -497,7 +503,21 @@ where
         let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
         #[cfg(feature = "testnet")]
         let target_gas_price = other.eth_config.target_gas_price;
-        let pending_create_inherent_data_providers = move |_, ()| async move {
+
+        #[cfg(not(feature = "testnet"))]
+        type InherentDataProviders = (
+            sp_consensus_aura::inherents::InherentDataProvider,
+            sp_timestamp::InherentDataProvider,
+        );
+
+        #[cfg(feature = "testnet")]
+        type InherentDataProviders = (
+            sp_consensus_aura::inherents::InherentDataProvider,
+            sp_timestamp::InherentDataProvider,
+            fp_dynamic_fee::InherentDataProvider,
+        );
+
+        let pending_create_inherent_data_providers = move |_: H256, _: ()| async move {
             let current = sp_timestamp::InherentDataProvider::from_system_time();
             let next_slot = current
                 .timestamp()
@@ -506,11 +526,18 @@ where
                 .expect("Overflow when calculating next slot");
             let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
             let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-				*timestamp,
-				slot_duration,
-			);
+                *timestamp,
+                slot_duration,
+            );
+            #[cfg(feature = "testnet")]
             let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-            Ok((slot, timestamp, dynamic_fee))
+
+            Ok::<InherentDataProviders, Box<dyn std::error::Error + Send + Sync>>((
+                slot,
+                timestamp,
+                #[cfg(feature = "testnet")]
+                dynamic_fee,
+            ))
         };
 
         let command_sink = command_sink.clone();
@@ -534,7 +561,7 @@ where
                 filter_pool: filter_pool.clone(),
                 max_past_logs,
                 fee_history_cache: fee_history_cache.clone(),
-                vvfee_history_cache_limit,
+                fee_history_cache_limit,
                 execute_gas_limit_multiplier,
                 forced_parent_hashes: None,
                 pending_create_inherent_data_providers,
@@ -554,7 +581,9 @@ where
 
             crate::rpc::create_full(
                 deps,
+                #[cfg(feature = "testnet")]
                 subscription_task_executor,
+                #[cfg(feature = "testnet")]
                 pubsub_notification_sinks.clone(),
             )
             .map_err(Into::into)
@@ -643,8 +672,14 @@ where
                 *timestamp,
                 slot_duration,
             );
+            #[cfg(feature = "testnet")]
             let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-            Ok((slot, timestamp, dynamic_fee))
+            Ok((
+                slot,
+                timestamp,
+                #[cfg(feature = "testnet")]
+                dynamic_fee,
+            ))
         };
 
         let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _>(

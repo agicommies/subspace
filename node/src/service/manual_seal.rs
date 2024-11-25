@@ -13,7 +13,10 @@ use sp_core::{traits::SpawnEssentialNamed, U256};
 
 use crate::{cli::Sealing, client::Client};
 
-use super::{BoxBlockImport, EthConfiguration, FullPool, FullSelectChain};
+use super::{BoxBlockImport, FullPool, FullSelectChain};
+
+#[cfg(feature = "testnet")]
+use super::EthConfiguration;
 
 pub struct ManualSealComponents {
     pub sealing: Sealing,
@@ -34,8 +37,13 @@ pub fn run_manual_seal_authorship(components: ManualSealComponents) -> Result<()
     let target_gas_price = components.eth_config.target_gas_price;
     let create_inherent_data_providers = move |_, ()| async move {
         let timestamp = MockTimestampInherentDataProvider;
+        #[cfg(feature = "testnet")]
         let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-        Ok((timestamp, dynamic_fee))
+        Ok((
+            timestamp,
+            #[cfg(feature = "testnet")]
+            dynamic_fee,
+        ))
     };
 
     let spawn_handle = components.spawn_handle.clone();
@@ -112,9 +120,15 @@ fn localnet_seal(
                     .map_err(|err| format!("{:?}", err))?;
                 let aura =
                     sp_consensus_aura::inherents::InherentDataProvider::new(timestamp.slot());
+                #[cfg(feature = "testnet")]
                 let dynamic_fee =
                     fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-                Ok((timestamp, aura, dynamic_fee))
+                Ok((
+                    timestamp,
+                    aura,
+                    #[cfg(feature = "testnet")]
+                    dynamic_fee,
+                ))
             }
         }
     };
