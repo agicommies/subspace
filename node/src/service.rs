@@ -1,5 +1,9 @@
 use futures::{channel::mpsc, prelude::*};
-use node_subspace_runtime::{opaque::Block, RuntimeApi, TransactionConverter};
+use node_subspace_runtime::{opaque::Block, RuntimeApi};
+
+#[cfg(feature = "testnet")]
+use node_subspace_runtime::TransactionConverter;
+
 use sc_client_api::{Backend, BlockBackend};
 use sc_network_sync::strategy::warp::WarpSyncProvider;
 use sc_service::{
@@ -10,21 +14,18 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_core::U256;
 use sp_runtime::traits::Block as BlockT;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
+#[cfg(feature = "testnet")]
+use std::path::Path;
+
+#[cfg(feature = "testnet")]
 use sp_core::H256;
 
 use crate::{
     cli::Sealing,
     client::{Client, FullBackend},
 };
-
-#[cfg(not(feature = "testnet"))]
-use sp_runtime::traits::NumberFor;
 
 #[cfg(feature = "testnet")]
 pub use crate::eth::{
@@ -461,9 +462,12 @@ where
     let (command_sink, commands_stream) = mpsc::channel(1000);
 
     // Sinks for pubsub notifications.
+    #[cfg(feature = "testnet")]
     let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
         fc_mapping_sync::EthereumBlockNotification<Block>,
     > = Default::default();
+
+    #[cfg(feature = "testnet")]
     let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
     // for ethereum-compatibility rpc.
@@ -472,9 +476,11 @@ where
     let rpc_builder = {
         let client = client.clone();
         let pool = transaction_pool.clone();
+        #[cfg(feature = "testnet")]
         let network = network.clone();
+        #[cfg(feature = "testnet")]
         let sync_service = sync_service.clone();
-
+        #[cfg(feature = "testnet")]
         let is_authority = role.is_authority();
         #[cfg(feature = "testnet")]
         let enable_dev_signer = other.eth_config.enable_dev_signer;
@@ -486,6 +492,7 @@ where
         let filter_pool = filter_pool.clone();
         #[cfg(feature = "testnet")]
         let frontier_backend = frontier_backend.clone();
+        #[cfg(feature = "testnet")]
         let pubsub_notification_sinks = pubsub_notification_sinks.clone();
         #[cfg(feature = "testnet")]
         let storage_override = other.storage_override.clone();
@@ -500,15 +507,10 @@ where
             prometheus_registry.clone(),
         ));
 
+        #[cfg(feature = "testnet")]
         let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
         #[cfg(feature = "testnet")]
         let target_gas_price = other.eth_config.target_gas_price;
-
-        #[cfg(not(feature = "testnet"))]
-        type InherentDataProviders = (
-            sp_consensus_aura::inherents::InherentDataProvider,
-            sp_timestamp::InherentDataProvider,
-        );
 
         #[cfg(feature = "testnet")]
         type InherentDataProviders = (
@@ -517,6 +519,7 @@ where
             fp_dynamic_fee::InherentDataProvider,
         );
 
+        #[cfg(feature = "testnet")]
         let pending_create_inherent_data_providers = move |_: H256, _: ()| async move {
             let current = sp_timestamp::InherentDataProvider::from_system_time();
             let next_slot = current
@@ -529,7 +532,6 @@ where
                 *timestamp,
                 slot_duration,
             );
-            #[cfg(feature = "testnet")]
             let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
 
             Ok::<InherentDataProviders, Box<dyn std::error::Error + Send + Sync>>((
@@ -541,53 +543,56 @@ where
         };
 
         let command_sink = command_sink.clone();
-        Box::new(move |subscription_task_executor| {
-            #[cfg(feature = "testnet")]
-            let eth_deps = crate::rpc::EthDeps {
-                client: client.clone(),
-                pool: pool.clone(),
-                graph: pool.pool().clone(),
-                converter: Some(TransactionConverter::<Block>::default()),
-                is_authority,
-                enable_dev_signer,
-                network: network.clone(),
-                sync: sync_service.clone(),
-                frontier_backend: match &*frontier_backend {
-                    fc_db::Backend::KeyValue(b) => b.clone(),
-                    fc_db::Backend::Sql(b) => b.clone(),
-                },
-                storage_override: storage_override.clone(),
-                block_data_cache: block_data_cache.clone(),
-                filter_pool: filter_pool.clone(),
-                max_past_logs,
-                fee_history_cache: fee_history_cache.clone(),
-                fee_history_cache_limit,
-                execute_gas_limit_multiplier,
-                forced_parent_hashes: None,
-                pending_create_inherent_data_providers,
-            };
+        Box::new(
+            move |#[cfg(feature = "testnet")] subscription_task_executor,
+                  #[cfg(not(feature = "testnet"))] _| {
+                #[cfg(feature = "testnet")]
+                let eth_deps = crate::rpc::EthDeps {
+                    client: client.clone(),
+                    pool: pool.clone(),
+                    graph: pool.pool().clone(),
+                    converter: Some(TransactionConverter::<Block>::default()),
+                    is_authority,
+                    enable_dev_signer,
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                        fc_db::Backend::Sql(b) => b.clone(),
+                    },
+                    storage_override: storage_override.clone(),
+                    block_data_cache: block_data_cache.clone(),
+                    filter_pool: filter_pool.clone(),
+                    max_past_logs,
+                    fee_history_cache: fee_history_cache.clone(),
+                    fee_history_cache_limit,
+                    execute_gas_limit_multiplier,
+                    forced_parent_hashes: None,
+                    pending_create_inherent_data_providers,
+                };
 
-            let deps = crate::rpc::FullDeps {
-                client: client.clone(),
-                pool: pool.clone(),
-                command_sink: if sealing.is_some() {
-                    Some(command_sink.clone())
-                } else {
-                    None
-                },
-                #[cfg(feature = "testnet")]
-                eth: eth_deps,
-            };
+                let deps = crate::rpc::FullDeps {
+                    client: client.clone(),
+                    pool: pool.clone(),
+                    command_sink: if sealing.is_some() {
+                        Some(command_sink.clone())
+                    } else {
+                        None
+                    },
+                    #[cfg(feature = "testnet")]
+                    eth: eth_deps,
+                };
 
-            crate::rpc::create_full(
-                deps,
-                #[cfg(feature = "testnet")]
-                subscription_task_executor,
-                #[cfg(feature = "testnet")]
-                pubsub_notification_sinks.clone(),
-            )
-            .map_err(Into::into)
-        })
+                crate::rpc::create_full(
+                    deps,
+                    #[cfg(feature = "testnet")]
+                    subscription_task_executor,
+                    #[cfg(feature = "testnet")]
+                    pubsub_notification_sinks.clone(),
+                )
+                .map_err(Into::into)
+            },
+        )
     };
 
     let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {

@@ -11,13 +11,17 @@ use sc_client_api::{
     AuxStore, UsageProvider,
 };
 use sc_consensus_manual_seal::rpc::EngineCommand;
+#[cfg(feature = "testnet")]
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_service::TransactionPool;
+#[cfg(feature = "testnet")]
 use sc_transaction_pool::ChainApi;
 use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+#[cfg(feature = "testnet")]
 use sp_inherents::CreateInherentDataProviders;
+#[cfg(feature = "testnet")]
 use sp_runtime::traits::Block as BlockT;
 // Runtime
 use node_subspace_runtime::{opaque::Block, AccountId, Balance, Hash, Nonce};

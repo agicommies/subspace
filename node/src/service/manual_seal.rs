@@ -9,7 +9,10 @@ use sc_consensus_manual_seal::consensus::{
 };
 use sc_service::Error;
 use sp_consensus::DisableProofRecording;
-use sp_core::{traits::SpawnEssentialNamed, U256};
+use sp_core::traits::SpawnEssentialNamed;
+
+#[cfg(feature = "testnet")]
+use sp_core::U256;
 
 use crate::{cli::Sealing, client::Client};
 

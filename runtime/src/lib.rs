@@ -13,8 +13,10 @@ use frame_support::{
 };
 use sp_genesis_builder::PresetId;
 
-use sp_runtime::{traits::Dispatchable, SaturatedConversion};
+use sp_runtime::SaturatedConversion;
 
+#[cfg(feature = "testnet")]
+use sp_runtime::traits::Dispatchable;
 // Consensus pallets
 use pallet_aura::MinimumPeriodTimesTwo;
 use pallet_grandpa::{
@@ -26,10 +28,12 @@ use pallet_governance::{Curator, GeneralSubnetApplicationCost, LegitWhitelist};
 use pallet_governance_api::GovernanceConfiguration;
 
 // EVM pallets
+#[cfg(feature = "testnet")]
 use pallet_ethereum::{
     Call::transact, PostLogContent, Transaction as EthereumTransaction, TransactionAction,
     TransactionData,
 };
+#[cfg(feature = "testnet")]
 use pallet_evm::{
     Account as EVMAccount, BalanceConverter, FeeCalculator, HashedAddressMapping, Runner,
 };
@@ -47,21 +51,31 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use frame_support::pallet_prelude::PhantomData;
 use sp_core::{
     crypto::{ByteArray, KeyTypeId},
-    OpaqueMetadata, H160, H256, U256,
+    OpaqueMetadata, H160,
 };
+
+#[cfg(feature = "testnet")]
+use sp_core::{H256, U256};
+
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 // Substrate runtime primitives
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{
-        AccountIdLookup, BlakeTwo256, Block as BlockT, DispatchInfoOf, IdentifyAccount, NumberFor,
-        One, PostDispatchInfoOf, UniqueSaturatedInto, Verify,
+        AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, Verify,
     },
-    transaction_validity::{TransactionSource, TransactionValidity, TransactionValidityError},
+    transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ConsensusEngineId, DispatchResult, MultiSignature,
 };
 
+#[cfg(feature = "testnet")]
+use sp_runtime::{
+    traits::{DispatchInfoOf, PostDispatchInfoOf, UniqueSaturatedInto},
+    transaction_validity::TransactionValidityError,
+};
+
+#[cfg(feature = "testnet")]
 use parity_scale_codec::{Decode, Encode};
 
 // Substrate versioning
@@ -73,7 +87,9 @@ use sp_version::RuntimeVersion;
 use subspace_runtime_api::{ModuleInfo, ModuleParams, ModuleStats};
 
 // Frontier EVM imports
+#[cfg(feature = "testnet")]
 use fp_evm::weight_per_gas;
+#[cfg(feature = "testnet")]
 use fp_rpc::TransactionStatus;
 
 // Transaction payment pallet
@@ -670,10 +686,13 @@ impl<B: BlockT> fp_rpc::ConvertTransaction<<B as BlockT>::Extrinsic> for Transac
     }
 }
 
+#[cfg(feature = "testnet")]
 const EVM_DECIMALS_FACTOR: u64 = 1_000_000_000_u64;
 
+#[cfg(feature = "testnet")]
 pub struct EvmBalanceConverter;
 
+#[cfg(feature = "testnet")]
 impl BalanceConverter for EvmBalanceConverter {
     fn into_evm_balance(value: U256) -> Option<U256> {
         U256::from(UniqueSaturatedInto::<u128>::unique_saturated_into(value))

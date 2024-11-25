@@ -1,7 +1,10 @@
 use futures::TryFutureExt;
 // Substrate
 use sc_cli::SubstrateCli;
-use sc_service::{DatabaseSource, PartialComponents};
+use sc_service::PartialComponents;
+
+#[cfg(feature = "testnet")]
+use sc_service::DatabaseSource;
 // Frontier
 #[cfg(feature = "testnet")]
 use fc_db::kv::frontier_database_dir;
